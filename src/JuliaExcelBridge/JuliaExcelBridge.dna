@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<DnaLibrary RollForward="LatestMinor" Name="JuliaExcelBridge Add-In" RuntimeVersion="v8.0" xmlns="http://schemas.excel-dna.net/addin/2020/07/dnalibrary">
+  <ExternalLibrary Path="JuliaExcelBridge.dll" ExplicitExports="false" LoadFromBytes="false" Pack="true" IncludePdb="false" />
+</DnaLibrary>
