@@ -6,6 +6,16 @@ Examples focus on RExcelBridge, but the same concepts apply to JuliaExcelBridge 
 
 ---
 
+## Where to Put Your R Functions
+
+Custom R functions that you want to call from Excel should be placed in `RFunctions.R`.
+
+This file is intended for user-defined wrappers, helper functions, and reusable logic. In general:
+
+- `startup.R` is for startup behavior  
+- `worker.R` is for bridge execution logic  
+- `RFunctions.R` is for your custom Excel-callable R functions  
+
 ## Before You Start
 
 Make sure:
@@ -130,7 +140,11 @@ Example workflow:
 
 Define reusable logic in R.
 
-Example (in startup.R or worker.R):
+User-defined functions should be added to `RFunctions.R`.
+
+This file is intended to hold custom R functions that you want to call from Excel. Keeping user functions in `RFunctions.R` makes them easier to find, maintain, and extend.
+
+Example in `RFunctions.R`:
 
 add_ten <- function(x) {  
   x + 10  
@@ -152,23 +166,23 @@ This demonstrates real numerical computation.
 
 ### R Wrapper
 
-Add to startup.R or worker.R:
+Add the wrapper to `RFunctions.R`:
 
 chol_decomp <- function(x, tol = 1e-8) {  
   x <- as.matrix(x)  
-
+  
   if (!is.numeric(x)) {  
     stop("Input must be numeric.")  
   }  
-
+  
   if (nrow(x) != ncol(x)) {  
     stop("Input matrix must be square.")  
   }  
-
+  
   if (max(abs(x - t(x))) > tol) {  
     stop("Input matrix must be symmetric.")  
   }  
-
+  
   chol(x)  
 }
 
@@ -238,6 +252,10 @@ For consistent results, it is recommended to set this explicitly.
 ---
 
 ## 10. Example Plot Wrapper in R
+
+User-defined plotting helpers can also be added to `RFunctions.R`.
+
+Example:
 
 make_plot <- function(file) {  
   png(file, width = 800, height = 600)  
