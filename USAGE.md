@@ -1,9 +1,12 @@
-# ExcelBridgeSuite Usage Guide
+# RExcelBridge Usage Guide
 
-This guide walks through how to use ExcelBridgeSuite, starting with basic validation and progressing to real computation and plotting.
+This guide explains how to use RExcelBridge, the R-based add-in in ExcelBridgeSuite.
 
-Examples focus on RExcelBridge, but the same concepts apply to JuliaExcelBridge and PythonExcelBridge.
+RExcelBridge is documented first because it is the primary working example in the suite. It provides the clearest reference implementation for how the bridges are intended to work: how Excel calls into a language runtime, how values are passed back and forth, how user-defined wrapper functions are organized, and how plots are generated.
 
+JuliaExcelBridge and PythonExcelBridge follow the same general design, but they are documented separately in their own directories.
+
+If you understand the RExcelBridge workflow first, the Julia and Python bridges will be much easier to use.
 ---
 
 ## Where to Put Your R Functions
@@ -27,9 +30,9 @@ Make sure:
 
 ---
 
-## 1. Start with Ping
+## 1. Start with RPing
 
-The first thing to test is Ping().
+The first thing to test is RPing().
 
 ### Purpose
 
@@ -42,7 +45,7 @@ Ping() is a connectivity and environment check. It confirms that:
 
 ### Example
 
-=Ping()
+=RPing()
 
 ### Expected Result
 
