@@ -180,6 +180,13 @@ Expected result:
 
 15
 
+
+![Description of image](docs/images/AddFunction.jpg)
+
+![Description of image](docs/images/RSource.jpg)
+
+![Description of image](docs/images/Add10.jpg)
+
 ---
 
 ## 7. Cholesky Decomposition (Advanced Example)
