@@ -111,9 +111,7 @@ Expected:
 
 Values returned to Excel. These may spill across multiple cells depending on how the bridge returns arrays.
 
-
 ![Description of image](docs/images/ReturnVector.jpg)
-
 
 ---
 
@@ -126,6 +124,7 @@ Example:
 =REval("matrix(c(1,2,3,4), nrow=2)")
 
 Expected:
+
 ![Description of image](docs/images/ReturnMatrix.jpg)
 
 A 2 × 2 result returned to Excel.
