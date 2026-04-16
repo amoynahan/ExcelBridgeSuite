@@ -136,7 +136,7 @@ Example data in Excel (A1:B3):
 
 Example workflow:
 
-=RPut("x", A1:B3)  
+=RSet("x", A1:B3)  
 =REval("x")
 
 ---
@@ -200,7 +200,7 @@ Put this matrix in Excel:
 
 Then run:
 
-=RPut("x", A1:B2)  
+=RSet("x", A1:B2)  
 =REval("chol_decomp(x)")
 
 Expected result:
