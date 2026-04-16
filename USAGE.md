@@ -82,7 +82,7 @@ Example:
 
 =REval("1+1")
 
-![Description of image](docs/images/SimpleExprssion.jpg)
+![Description of image](docs/images/SimpleExpression.jpg)
 
 Expected result:
 
