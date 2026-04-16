@@ -47,13 +47,13 @@ Ping() is a connectivity and environment check. It confirms that:
 
 =RPing()
 
-![Description of image](docs/images/Rping.jpg)
-
 ### Expected Result
 
 You should see something like:
 
 OK | R version 4.5.3 (2026-03-11 ucrt)
+
+![Description of image](docs/images/Rping.jpg)
 
 ### What it means
 
