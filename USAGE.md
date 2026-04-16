@@ -111,6 +111,10 @@ Expected:
 
 Values returned to Excel. These may spill across multiple cells depending on how the bridge returns arrays.
 
+
+![Description of image](docs/images/ReturnVector.jpg)
+
+
 ---
 
 ## 4. Return a Matrix
@@ -122,6 +126,7 @@ Example:
 =REval("matrix(c(1,2,3,4), nrow=2)")
 
 Expected:
+![Description of image](docs/images/ReturnMatrix.jpg)
 
 A 2 × 2 result returned to Excel.
 
@@ -140,7 +145,13 @@ Example data in Excel (A1:B3):
 Example workflow:
 
 =RSet("x", A1:B3)  
+
+![Description of image](docs/images/RSet.jpg)
+
 =REval("x")
+=RGet("x")
+
+![Description of image](docs/images/RGet.jpg)
 
 ---
 
