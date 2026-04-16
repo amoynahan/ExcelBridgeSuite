@@ -46,6 +46,7 @@ Ping() is a connectivity and environment check. It confirms that:
 ### Example
 
 =RPing()
+![Description of image](docs/images/your-image.png)
 
 ### Expected Result
 
