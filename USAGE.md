@@ -351,3 +351,144 @@ From there, build up:
 - plotting  
 
 This progression ensures everything is working step by step.
+
+
+# RExcelBridge user-visible functions
+
+This file lists the Excel worksheet functions exposed to end users by the current `RExcelBridge` code.
+
+## User-visible worksheet functions
+
+### `RPing()`
+Returns a simple response from the persistent R worker.
+
+Example:
+```excel
+=RPing()
+```
+
+### `REval(code)`
+Evaluates R code in the persistent R session.
+
+Arguments:
+- `code`: R code to evaluate.
+
+Example:
+```excel
+=REval("1+1")
+```
+
+### `RPlot(code, plot_name, width, height)`
+Renders an R plot to a PNG file and returns the file path.
+
+Arguments:
+- `code`: R plotting code or function call.
+- `plot_name`: optional label used in the file name.
+- `width`: PNG width in pixels.
+- `height`: PNG height in pixels.
+
+Example:
+```excel
+=RPlot("plot(1:10)","SimpleExpression",800,600)
+```
+
+### `RSource(file)`
+Sources an R script file into the persistent R session.
+
+Arguments:
+- `file`: path to an R script file.
+
+Example:
+```excel
+=RSource("D:/Projects/RExcelBridge/startup.R")
+```
+
+### `RCall(fun, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10)`
+Calls an R function with up to 10 arguments.
+
+Arguments:
+- `fun`: name of the R function.
+- `arg1` to `arg10`: arguments passed to the function.
+
+Example:
+```excel
+=RCall("sum",1,2,3)
+```
+
+### `RSet(name, value)`
+Assigns an Excel value or range to an object in the persistent R session.
+
+Arguments:
+- `name`: name of the R object.
+- `value`: Excel value, vector, or range.
+
+Example:
+```excel
+=RSet("x",A1:A10)
+```
+
+### `RGet(name)`
+Returns an object from the persistent R session to Excel.
+
+Arguments:
+- `name`: name of the R object.
+
+Example:
+```excel
+=RGet("x")
+```
+
+### `RExists(name)`
+Checks whether an object exists in the persistent R session.
+
+Arguments:
+- `name`: name of the R object.
+
+Example:
+```excel
+=RExists("x")
+```
+
+### `RRemove(name)`
+Removes an object from the persistent R session.
+
+Arguments:
+- `name`: name of the R object.
+
+Example:
+```excel
+=RRemove("x")
+```
+
+### `RObjects()`
+Lists objects in the persistent R session, including type and dimensions.
+
+Example:
+```excel
+=RObjects()
+```
+
+### `RDescribe(name)`
+Describes one object in the persistent R session.
+
+Arguments:
+- `name`: name of the R object.
+
+Example:
+```excel
+=RDescribe("x")
+```
+
+### `RPlotTest()`
+Creates a simple base R test plot and returns the PNG path.
+
+Example:
+```excel
+=RPlotTest()
+```
+
+## Notes
+
+- These are worksheet functions exposed with Excel-DNA `[ExcelFunction(...)]` attributes.
+- Based on the code reviewed, `RPut` is **not** currently one of the exported user-visible functions.
+- If you want `RPut` to exist, it would need to be added as another exported Excel function, or `RSet` could be renamed/aliased to `RPut`.
