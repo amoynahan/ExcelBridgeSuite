@@ -180,7 +180,6 @@ Expected result:
 
 15
 
-
 ![Description of image](docs/images/AddFunction.jpg)
 
 ![Description of image](docs/images/RSource.jpg)
