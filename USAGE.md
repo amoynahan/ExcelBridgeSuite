@@ -97,6 +97,10 @@ Expected result:
 
 4
 
+Get the current R working directory
+
+![Description of image](docs/images/getwd.jpg)
+
 ---
 
 ## 3. Return a Vector
