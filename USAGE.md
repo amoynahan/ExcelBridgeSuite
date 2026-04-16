@@ -82,6 +82,8 @@ Example:
 
 =REval("1+1")
 
+![Description of image](docs/images/SimpleExprssion.jpg)
+
 Expected result:
 
 2
