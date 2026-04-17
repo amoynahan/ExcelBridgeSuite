@@ -238,6 +238,40 @@ Expected result:
 
 ![Description of image](docs/images/CholDecomp.jpg)
 
+## Using Excel LAMBDA with RCall
+
+You can wrap an `RCall` into an Excel LAMBDA function to make it reusable and easier to read.
+
+### Inline example
+
+```excel
+=LAMBDA(matrix, RCall("CholDecomp", matrix))(A1:B2)
+```
+
+This defines a temporary function that takes a range (`matrix`) and passes it to the R function `CholDecomp`.
+
+### Why use LAMBDA
+
+- Cleaner formulas (avoids repeating `RCall(...)` everywhere)
+- Reusable logic across the workbook
+- Can be saved as a named function (e.g., `CholDecomp`)
+- Provides a place to add validation (e.g., ensure matrix is square)
+
+### Named function (recommended)
+
+Define in Excel Name Manager:
+
+```excel
+CholDecomp = LAMBDA(matrix, RCall("CholDecomp", matrix))
+```
+
+Then use it like a native Excel function:
+
+```excel
+=CholDecomp(A1:B2)
+```
+
+
 ---
 
 ## 8. Plotting
