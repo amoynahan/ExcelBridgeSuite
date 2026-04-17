@@ -223,13 +223,14 @@ Put this matrix in Excel:
 
 Then run:
 
-=RSet("x", A1:B2)  
-=REval("chol_decomp(x)")
+RCall("CholDecomp",A1:B2)
 
 Expected result:
 
 2        1  
 0   1.414214  
+
+![Description of image](docs/images/CholDecomp.jpg)
 
 ### Requirements
 
