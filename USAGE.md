@@ -217,25 +217,29 @@ chol_decomp <- function(x, tol = 1e-8) {
 ### Excel Example
 
 ### Requirements
-
-- Matrix must be square  
-- Matrix must be symmetric  
-- Matrix must be positive definite 
+- Matrix must be square
+- Matrix must be symmetric
+- Matrix must be positive definite
 
 Put this matrix in Excel:
 
-4   2  
-2   3  
+```
+4   2
+2   3
+```
 
 Then run:
 
-RCall("CholDecomp",A1:B2)
+```excel
+=RCall("CholDecomp", A1:B2)
+```
 
 Expected result:
 
-2        1  
+```
+2        1
 0   1.414214
-
+```
 ![Description of image](docs/images/CholDecomp.jpg)
 
 ## Using Excel LAMBDA with RCall
