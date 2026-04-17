@@ -234,7 +234,8 @@ RCall("CholDecomp",A1:B2)
 Expected result:
 
 2        1  
-0   1.414214  
+0   1.414214
+
 ![Description of image](docs/images/CholDecomp.jpg)
 
 ## Using Excel LAMBDA with RCall
