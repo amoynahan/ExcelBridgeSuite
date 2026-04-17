@@ -257,18 +257,25 @@ This defines a temporary function that takes a range (`matrix`) and passes it to
 - Can be saved as a named function (e.g., `CholDecomp`)
 - Provides a place to add validation (e.g., ensure matrix is square)
 
+![Description of image](docs/images/Lambda.jpg)
+
 ### Named function (recommended)
 
 Define in Excel Name Manager:
 
 ```excel
 CholDecomp = LAMBDA(matrix, RCall("CholDecomp", matrix))
+
+![Description of image](docs/images/NamedLambda.jpg)
+
 ```
 
 Then use it like a native Excel function:
 
 ```excel
 =CholDecomp(A1:B2)
+
+![Description of image](docs/images/NamedCholDecomp.jpg)
 ```
 
 
