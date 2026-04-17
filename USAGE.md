@@ -216,6 +216,12 @@ chol_decomp <- function(x, tol = 1e-8) {
 
 ### Excel Example
 
+### Requirements
+
+- Matrix must be square  
+- Matrix must be symmetric  
+- Matrix must be positive definite 
+
 Put this matrix in Excel:
 
 4   2  
@@ -232,11 +238,6 @@ Expected result:
 
 ![Description of image](docs/images/CholDecomp.jpg)
 
-### Requirements
-
-- Matrix must be square  
-- Matrix must be symmetric  
-- Matrix must be positive definite  
 
 ---
 
