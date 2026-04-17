@@ -238,7 +238,6 @@ Expected result:
 
 ![Description of image](docs/images/CholDecomp.jpg)
 
-
 ---
 
 ## 8. Plotting
