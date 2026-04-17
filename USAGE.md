@@ -247,7 +247,6 @@ You can wrap an `RCall` into an Excel LAMBDA function to make it reusable and ea
 ```excel
 =LAMBDA(matrix, RCall("CholDecomp", matrix))(A1:B2)
 ```
-
 This defines a temporary function that takes a range (`matrix`) and passes it to the R function `CholDecomp`.
 
 ### Why use LAMBDA
@@ -265,19 +264,15 @@ Define in Excel Name Manager:
 
 ```excel
 CholDecomp = LAMBDA(matrix, RCall("CholDecomp", matrix))
-
-![Description of image](docs/images/NamedLambda.jpg)
-
 ```
+![Description of image](docs/images/NamedLambda.jpg)
 
 Then use it like a native Excel function:
 
 ```excel
 =CholDecomp(A1:B2)
-
-![Description of image](docs/images/NamedCholDecomp.jpg)
 ```
-
+![Description of image](docs/images/NamedCholDecomp.jpg)
 
 ---
 
