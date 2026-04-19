@@ -343,32 +343,10 @@ X Y
 
 ```excel
 =RPlot("plot(1:5, c(0,1,4,9,16), type='b')", "BasicPlot", 800, 600)
-
+```
 3. Use the ribbon:
 
 RExcelBridge → Insert Plot From Selected Cell
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ---
 
