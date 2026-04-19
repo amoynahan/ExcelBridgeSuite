@@ -337,6 +337,8 @@ RExcelBridge → Insert Plot From Selected Cell
 
 ## Example 2 — Dynamic Plot (ggplot, updates with F9)
 
+## Example 2 — Dynamic Plot (ggplot, updates with F9)
+
 This version uses named Excel ranges and updates when you press F9.
 
 ### Why this uses both `RPlotDataNamed` and `PlotLink`
@@ -365,7 +367,6 @@ Because the workbook now contains VBA, save it as:
 
 ```text
 Excel Macro-Enabled Workbook (*.xlsm)
-
 
 
 ---
