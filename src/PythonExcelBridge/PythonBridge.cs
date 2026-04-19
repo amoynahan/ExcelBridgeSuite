@@ -35,7 +35,7 @@ public static class PythonBridge
     private static string StartupPath => Path.Combine(AddInDir, "startup.py");
     private static string LogPath => Path.Combine(AddInDir, "python_worker_stderr.log");
     private static string StartupErrorLogPath => Path.Combine(AddInDir, "addin_startup_error.log");
-    private static string JuliaConfigPath => Path.Combine(AddInDir, "python-path.txt");
+    private static string PythonConfigPath => Path.Combine(AddInDir, "python-path.txt");
     private static string PlotConfigPath => Path.Combine(AddInDir, "plot-path.txt");
 
     public static void TryStart()
@@ -306,7 +306,7 @@ public static class PythonBridge
             {
             }
 
-            string shapeName = $"PPlot_{SanitizeFileComponent(sheetName)}_{SanitizeFileComponent(cellAddress)}";
+            string shapeName = $"RPlot_{SanitizeFileComponent(sheetName)}_{SanitizeFileComponent(cellAddress)}";
 
             try
             {
@@ -443,12 +443,14 @@ public static class PythonBridge
     {
         var letters = string.Empty;
         int col = columnNumber;
+
         while (col > 0)
         {
             int rem = (col - 1) % 26;
             letters = (char)('A' + rem) + letters;
             col = (col - 1) / 26;
         }
+
         return letters;
     }
 
@@ -543,52 +545,60 @@ public static class PythonBridge
 
     
 private static string GetPythonPath()
-    {
-        if (File.Exists(JuliaConfigPath))
-        {
-            string configured = File.ReadAllText(JuliaConfigPath).Trim();
-
-            if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
-                return configured;
-        }
-
-        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        
-string[] candidates =
 {
-    Path.Combine(localAppData, "Microsoft", "WindowsApps", "python.exe"),
-    Path.Combine(localAppData, "Programs", "Python", "Python313", "python.exe"),
-    Path.Combine(localAppData, "Programs", "Python", "Python312", "python.exe"),
-    Path.Combine(localAppData, "Programs", "Python", "Python311", "python.exe"),
-    Path.Combine(localAppData, "Programs", "Python", "Python310", "python.exe"),
-    Path.Combine(AddInDir, "Python", "python.exe"),
-    Path.Combine(AddInDir, "runtime", "Python", "python.exe")
-};
+    if (File.Exists(PythonConfigPath))
+    {
+        string configured = File.ReadAllText(PythonConfigPath).Trim();
 
-        foreach (string candidate in candidates)
+        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
+            return configured;
+    }
+
+    string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    string[] localCandidates =
+    {
+        Path.Combine(localAppData, "Microsoft", "WindowsApps", "python.exe"),
+        Path.Combine(localAppData, "Programs", "Python", "Python313", "python.exe"),
+        Path.Combine(localAppData, "Programs", "Python", "Python312", "python.exe"),
+        Path.Combine(localAppData, "Programs", "Python", "Python311", "python.exe"),
+        Path.Combine(localAppData, "Programs", "Python", "Python310", "python.exe"),
+        Path.Combine(userProfile, "AppData", "Local", "Programs", "Python", "Python313", "python.exe"),
+        Path.Combine(userProfile, "AppData", "Local", "Programs", "Python", "Python312", "python.exe"),
+        Path.Combine(userProfile, "AppData", "Local", "Programs", "Python", "Python311", "python.exe"),
+        Path.Combine(userProfile, "AppData", "Local", "Programs", "Python", "Python310", "python.exe"),
+        Path.Combine(AddInDir, "Python", "python.exe"),
+        Path.Combine(AddInDir, "runtime", "Python", "python.exe")
+    };
+
+    foreach (string candidate in localCandidates)
+    {
+        if (File.Exists(candidate))
+            return candidate;
+    }
+
+    string[] programRoots =
+    {
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+    };
+
+    foreach (string root in programRoots.Where(r => !string.IsNullOrWhiteSpace(r)))
+    {
+        if (!Directory.Exists(root))
+            continue;
+
+        foreach (string candidateDir in Directory.EnumerateDirectories(root, "Python*"))
         {
+            string candidate = Path.Combine(candidateDir, "python.exe");
             if (File.Exists(candidate))
                 return candidate;
         }
-
-        string[] programRoots =
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
-        };
-
-        foreach (string root in programRoots.Where(r => !string.IsNullOrWhiteSpace(r)))
-        {
-            foreach (string candidateDir in Directory.EnumerateDirectories(root, "Julia-*"))
-            {
-                string candidate = Path.Combine(candidateDir, "bin", "python.exe");
-                if (File.Exists(candidate))
-                    return candidate;
-            }
-        }
-
-        return "python";
     }
+
+    return "python";
+}
 
     private static object[] NormalizeArgs(IEnumerable<object?> args)
     {
@@ -607,6 +617,14 @@ string[] candidates =
 
     private static object NormalizeExcelValue(object value)
     {
+        if (value is object[] vector)
+        {
+            var output = new object?[vector.Length];
+            for (int i = 0; i < vector.Length; i++)
+                output[i] = NormalizeScalar(vector[i]);
+            return output;
+        }
+
         if (value is object[,] range)
         {
             int rowMin = range.GetLowerBound(0);
@@ -659,11 +677,12 @@ string[] candidates =
 
         return value switch
         {
-            double d => d,
-            float f => (double)f,
+            double d => (double.IsNaN(d) || double.IsInfinity(d)) ? null : d,
+            float f => (float.IsNaN(f) || float.IsInfinity(f)) ? null : (double)f,
             int i => i,
             long l => l,
             short s => (int)s,
+            decimal m => m,
             bool b => b,
             string s => s,
             DateTime dt => dt.ToString("o", CultureInfo.InvariantCulture),

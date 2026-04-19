@@ -258,7 +258,7 @@ public static class JBridge
             string? file = rawValue?.ToString();
 
             if (string.IsNullOrWhiteSpace(file))
-                return "Error: selected cell is blank. Select a cell containing the PNG path returned by RPlot.";
+                return "Error: selected cell is blank. Select a cell containing the PNG path returned by JPlot.";
 
             return InsertPlotFile(file);
         }
@@ -306,7 +306,7 @@ public static class JBridge
             {
             }
 
-            string shapeName = $"RPlot_{SanitizeFileComponent(sheetName)}_{SanitizeFileComponent(cellAddress)}";
+            string shapeName = $"JPlot_{SanitizeFileComponent(sheetName)}_{SanitizeFileComponent(cellAddress)}";
 
             try
             {

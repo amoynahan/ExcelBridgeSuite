@@ -5,7 +5,7 @@ namespace JuliaExcelBridge;
 
 public static class VersionFunctions
 {
-    private const string BUILD_TAG = "DEV-2026-04-12-JA";
+    private const string BUILD_TAG = "DEV-2026-04-19-JB";
 
     [ExcelFunction(Name = "JVersion", Description = "Returns the JuliaExcelBridge build/version string.", Category = "JuliaExcelBridge")]
     public static string JVersion()

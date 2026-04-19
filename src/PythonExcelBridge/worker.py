@@ -19,6 +19,15 @@ PLOTS_LOADED = False
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def ensure_pandas_alias() -> None:
+    try:
+        import pandas as pd  # type: ignore
+        globals()["pd"] = pd
+    except Exception:
+        pass
+
+
+
 def make_ok(request_id: Any, result: Any) -> dict[str, Any]:
     return {"id": request_id, "ok": True, "result": result}
 
@@ -217,6 +226,7 @@ def render_plot_to_file(code: str, file: str, width: int = 800, height: int = 60
     if not file:
         raise ValueError("Plot file path is blank.")
     ensure_matplotlib_loaded()
+    ensure_pandas_alias()
     Path(file).parent.mkdir(parents=True, exist_ok=True)
     dpi = max(int(res), 72)
     figsize = (max(int(width),1) / dpi, max(int(height),1) / dpi)

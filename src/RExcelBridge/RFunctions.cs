@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using ExcelDna.Integration;
 
 namespace RExcelBridge;
@@ -56,20 +58,50 @@ public static class RFunctions
         }
     }
 
+    private static double NormalizeTrigger(object triggerRange)
+    {
+        if (triggerRange is object[,] arr)
+        {
+            double sum = 0.0;
+
+            int rows = arr.GetLength(0);
+            int cols = arr.GetLength(1);
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    if (arr[i, j] is double d)
+                        sum += d;
+                }
+            }
+
+            return sum;
+        }
+
+        if (triggerRange is double d2)
+            return d2;
+
+        return 0.0;
+    }
+
     [ExcelFunction(
         Name = "RPlot",
-        Description = "Render an R plot to a stable PNG file based on workbook, sheet, and cell, and return the file path.",
+        Description = "Render an R plot to a PNG and return the file path.",
         Category = "RExcelBridge")]
     public static object RPlot(
-        [ExcelArgument(Name = "code", Description = "R plotting code or a plotting function call, such as plot(1:10) or my_plot().")] string code,
-        [ExcelArgument(Name = "plot_name", Description = "Optional stable plot label used in the file name.")] object plotName,
-        [ExcelArgument(Name = "width", Description = "PNG width in pixels.")] object width,
-        [ExcelArgument(Name = "height", Description = "PNG height in pixels.")] object height)
+        string code,
+        object plotName,
+        object width,
+        object height,
+        object triggerRange)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(code))
                 return "Error: code is blank.";
+
+            _ = NormalizeTrigger(triggerRange);
 
             string? label = plotName is ExcelMissing or ExcelEmpty ? null : plotName?.ToString();
             int w = ToIntOrDefault(width, 800);
@@ -251,14 +283,113 @@ public static class RFunctions
     }
 
     [ExcelFunction(
-    Name = "RPlotPath",
-    Description = "Return the resolved plot output directory.",
-    Category = "RExcelBridge")]
-    public static object RPlotPath()
+        Name = "RPlotDataNamed",
+        Description = "Build an R data frame from named Excel ranges, run plotting code against df, and return the plot path.",
+        Category = "RExcelBridge",
+        IsVolatile = true)]
+    public static object RPlotDataNamed(
+        [ExcelArgument(Name = "code", Description = "R plotting code that uses data frame df.")] object code,
+        [ExcelArgument(Name = "plot_name", Description = "Optional stable plot label.")] object plot_name,
+        [ExcelArgument(Name = "width", Description = "PNG width in pixels.")] object width,
+        [ExcelArgument(Name = "height", Description = "PNG height in pixels.")] object height,
+        [ExcelArgument(Name = "recalc_key", Description = "Optional recalc trigger.")] object recalc_key,
+
+        [ExcelArgument(Name = "name1")] object name1, [ExcelArgument(Name = "range1")] object range1,
+        [ExcelArgument(Name = "name2")] object name2, [ExcelArgument(Name = "range2")] object range2,
+        [ExcelArgument(Name = "name3")] object name3, [ExcelArgument(Name = "range3")] object range3,
+        [ExcelArgument(Name = "name4")] object name4, [ExcelArgument(Name = "range4")] object range4,
+        [ExcelArgument(Name = "name5")] object name5, [ExcelArgument(Name = "range5")] object range5,
+        [ExcelArgument(Name = "name6")] object name6, [ExcelArgument(Name = "range6")] object range6,
+        [ExcelArgument(Name = "name7")] object name7, [ExcelArgument(Name = "range7")] object range7,
+        [ExcelArgument(Name = "name8")] object name8, [ExcelArgument(Name = "range8")] object range8,
+        [ExcelArgument(Name = "name9")] object name9, [ExcelArgument(Name = "range9")] object range9,
+        [ExcelArgument(Name = "name10")] object name10, [ExcelArgument(Name = "range10")] object range10)
     {
         try
         {
-            return RBridge.GetPlotDirectory();
+            _ = NormalizeTrigger(recalc_key);
+
+            string rCode = ToText(code);
+            if (string.IsNullOrWhiteSpace(rCode))
+                return "Error: code is blank.";
+
+            string plotTag = ToText(plot_name);
+            if (string.IsNullOrWhiteSpace(plotTag))
+                plotTag = "RPlotDataNamed";
+
+            int pngWidth = ToIntOrDefault(width, 900);
+            int pngHeight = ToIntOrDefault(height, 600);
+
+            var pairs = new List<(string Name, object Range)>
+            {
+                (ToText(name1), range1),
+                (ToText(name2), range2),
+                (ToText(name3), range3),
+                (ToText(name4), range4),
+                (ToText(name5), range5),
+                (ToText(name6), range6),
+                (ToText(name7), range7),
+                (ToText(name8), range8),
+                (ToText(name9), range9),
+                (ToText(name10), range10)
+            };
+
+            var cols = new List<(string Name, object Values, int Length)>();
+
+            foreach (var pair in pairs)
+            {
+                bool hasName = !string.IsNullOrWhiteSpace(pair.Name);
+                bool hasRange = HasUsableRange(pair.Range);
+
+                if (!hasName && !hasRange)
+                    continue;
+
+                if (hasName && !hasRange)
+                    return $"Error: range missing for column '{pair.Name}'.";
+
+                if (!hasName && hasRange)
+                    return "Error: a range was supplied without a column name.";
+
+                object normalized = NormalizeRangeToColumnVector(pair.Range);
+                int length = GetVectorLength(normalized);
+
+                if (length == 0)
+                    return $"Error: range for column '{pair.Name}' is empty.";
+
+                cols.Add((pair.Name, normalized, length));
+            }
+
+            if (cols.Count == 0)
+                return "Error: no named ranges were supplied.";
+
+            int expectedLength = cols[0].Length;
+            foreach (var col in cols)
+            {
+                if (col.Length != expectedLength)
+                    return $"Error: column '{col.Name}' has {col.Length} values, expected {expectedLength}.";
+            }
+
+            var tempNames = new List<string>();
+            for (int i = 0; i < cols.Count; i++)
+            {
+                string tempName = $".__rexcel_plot_col_{Guid.NewGuid():N}_{i + 1}";
+                tempNames.Add(tempName);
+
+                object setResult = RBridge.Set(tempName, cols[i].Values);
+                if (setResult is string setError &&
+                    (setError.StartsWith("Error", StringComparison.OrdinalIgnoreCase) ||
+                     setError.StartsWith("R error:", StringComparison.OrdinalIgnoreCase)))
+                    return setError;
+            }
+
+            string assignDfCode = BuildNamedDataFrameCode(tempNames, cols.Select(c => c.Name).ToList());
+            object assignResult = RBridge.Eval(assignDfCode);
+            if (assignResult is string assignError &&
+                (assignError.StartsWith("Error", StringComparison.OrdinalIgnoreCase) ||
+                 assignError.StartsWith("R error:", StringComparison.OrdinalIgnoreCase)))
+                return assignError;
+
+            return RBridge.Plot(rCode, plotTag, pngWidth, pngHeight);
         }
         catch (Exception ex)
         {
@@ -266,4 +397,136 @@ public static class RFunctions
         }
     }
 
+    private static string ToText(object value)
+    {
+        if (value is null || value is ExcelMissing || value is ExcelEmpty)
+            return string.Empty;
+
+        return Convert.ToString(value)?.Trim() ?? string.Empty;
+    }
+
+    private static bool HasUsableRange(object value)
+    {
+        if (value is null || value is ExcelMissing || value is ExcelEmpty)
+            return false;
+
+        if (value is string s)
+            return !string.IsNullOrWhiteSpace(s);
+
+        if (value is object[,] arr)
+        {
+            int rowMin = arr.GetLowerBound(0);
+            int rowMax = arr.GetUpperBound(0);
+            int colMin = arr.GetLowerBound(1);
+            int colMax = arr.GetUpperBound(1);
+
+            for (int r = rowMin; r <= rowMax; r++)
+            {
+                for (int c = colMin; c <= colMax; c++)
+                {
+                    object cell = arr[r, c];
+                    if (cell is not null && cell is not ExcelMissing && cell is not ExcelEmpty)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static object NormalizeRangeToColumnVector(object value)
+    {
+        if (value is null || value is ExcelMissing || value is ExcelEmpty)
+            return Array.Empty<object?>();
+
+        if (value is object[,] arr)
+        {
+            int rowMin = arr.GetLowerBound(0);
+            int rowMax = arr.GetUpperBound(0);
+            int colMin = arr.GetLowerBound(1);
+            int colMax = arr.GetUpperBound(1);
+            int rows = rowMax - rowMin + 1;
+            int cols = colMax - colMin + 1;
+
+            if (rows == 1 && cols == 1)
+                return new object?[] { NormalizePlotScalar(arr[rowMin, colMin]) };
+
+            if (cols == 1)
+            {
+                var output = new object?[rows];
+                for (int r = 0; r < rows; r++)
+                    output[r] = NormalizePlotScalar(arr[rowMin + r, colMin]);
+                return output;
+            }
+
+            if (rows == 1)
+            {
+                var output = new object?[cols];
+                for (int c = 0; c < cols; c++)
+                    output[c] = NormalizePlotScalar(arr[rowMin, colMin + c]);
+                return output;
+            }
+
+            var flattened = new object?[rows * cols];
+            int k = 0;
+            for (int r = rowMin; r <= rowMax; r++)
+            {
+                for (int c = colMin; c <= colMax; c++)
+                    flattened[k++] = NormalizePlotScalar(arr[r, c]);
+            }
+
+            return flattened;
+        }
+
+        return new object?[] { NormalizePlotScalar(value) };
+    }
+
+    private static object? NormalizePlotScalar(object? value)
+    {
+        if (value is null || value is ExcelEmpty || value is ExcelMissing || value is ExcelError)
+            return null;
+
+        return value switch
+        {
+            double d => (double.IsNaN(d) || double.IsInfinity(d)) ? null : d,
+            float f => (float.IsNaN(f) || float.IsInfinity(f)) ? null : (double)f,
+            int i => i,
+            long l => l,
+            short s => (int)s,
+            decimal m => m,
+            bool b => b,
+            string s => s,
+            DateTime dt => dt.ToString("o"),
+            _ => value.ToString()
+        };
+    }
+
+    private static int GetVectorLength(object value)
+    {
+        if (value is Array arr)
+            return arr.Length;
+
+        return value is null ? 0 : 1;
+    }
+
+    private static string BuildNamedDataFrameCode(IReadOnlyList<string> tempNames, IReadOnlyList<string> columnNames)
+    {
+        var parts = new List<string>();
+
+        for (int i = 0; i < tempNames.Count; i++)
+        {
+            string tempName = tempNames[i];
+            string colName = EscapeRString(columnNames[i]);
+            parts.Add($"\"{colName}\" = get(\"{EscapeRString(tempName)}\", envir = .GlobalEnv)");
+        }
+
+        return "df <- data.frame(" + string.Join(", ", parts) + ", check.names = FALSE, stringsAsFactors = FALSE)";
+    }
+
+    private static string EscapeRString(string text)
+    {
+        return (text ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
 }

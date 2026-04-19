@@ -443,12 +443,14 @@ public static class RBridge
     {
         var letters = string.Empty;
         int col = columnNumber;
+
         while (col > 0)
         {
             int rem = (col - 1) % 26;
             letters = (char)('A' + rem) + letters;
             col = (col - 1) / 26;
         }
+
         return letters;
     }
 
@@ -621,6 +623,14 @@ public static class RBridge
 
     private static object NormalizeExcelValue(object value)
     {
+        if (value is object[] vector)
+        {
+            var output = new object?[vector.Length];
+            for (int i = 0; i < vector.Length; i++)
+                output[i] = NormalizeScalar(vector[i]);
+            return output;
+        }
+
         if (value is object[,] range)
         {
             int rowMin = range.GetLowerBound(0);
@@ -673,11 +683,12 @@ public static class RBridge
 
         return value switch
         {
-            double d => d,
-            float f => (double)f,
+            double d => (double.IsNaN(d) || double.IsInfinity(d)) ? null : d,
+            float f => (float.IsNaN(f) || float.IsInfinity(f)) ? null : (double)f,
             int i => i,
             long l => l,
             short s => (int)s,
+            decimal m => m,
             bool b => b,
             string s => s,
             DateTime dt => dt.ToString("o", CultureInfo.InvariantCulture),

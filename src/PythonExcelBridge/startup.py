@@ -14,4 +14,9 @@ def make_seq_table(start, stop, step=1):
     return [[x, x * x] for x in xs]
 
 
+try:
+    import pandas as pd  # noqa: F401
+except Exception:
+    pass
+
 from PythonFunctions import *

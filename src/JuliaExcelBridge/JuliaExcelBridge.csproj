@@ -12,6 +12,7 @@
     <ExcelDnaCreate32BitAddIn>false</ExcelDnaCreate32BitAddIn>
     <ExcelDnaCreate64BitAddIn>true</ExcelDnaCreate64BitAddIn>
     <UseWindowsForms>true</UseWindowsForms>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +20,19 @@
     <PackageReference Include="ExcelDna.Integration" Version="1.9.0" />
     <PackageReference Include="Microsoft.Office.Interop.Excel" Version="15.0.4795.1001" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="AddIn.cs" />
+    <Compile Include="JBridge.cs" />
+    <Compile Include="JFunctions.cs" />
+    <Compile Include="PlotCommands.cs" />
+    <Compile Include="VersionFunctions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="bin\**" />
+    <None Remove="obj\**" />
   </ItemGroup>
 
   <ItemGroup>
