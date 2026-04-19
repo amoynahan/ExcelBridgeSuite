@@ -376,7 +376,7 @@ In cell `D2`, enter:
 
 After you enter the formula, the cell will display the path to the generated PNG file. This is expected.
 
-![Description of image](docs/images/RPlotDataNames.jpg)
+![Description of image](docs/images/RPlotDataNamed.jpg)
 
 In a second cell, use `PlotLink` to display the image in the worksheet.
 
