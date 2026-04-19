@@ -351,7 +351,7 @@ This pattern uses two function calls on purpose.
 
 Using two cells makes recalculation more reliable in Excel. When the input data changes and you press `F9`, Excel recalculates the plot-producing cell first, then `PlotLink` refreshes from the updated image path. This is the recommended pattern for dynamic plots.
 
-### Add the VBA module `DisplayImages`
+### Add the VBA module `DisplayImages` (available in the `vba/` directory)
 
 To use `PlotLink`, the workbook must contain the VBA macro code.
 
@@ -367,6 +367,21 @@ Because the workbook now contains VBA, save it as:
 
 ```text
 Excel Macro-Enabled Workbook (*.xlsm)
+
+If you save as .xlsx, Excel will remove the VBA code.
+
+### Step 1 — Create the plot (returns image path)
+
+In cell `D2`, enter:
+
+After you enter the formula, the cell will display the path to the generated PNG file. This is expected.
+
+In a second cell, use `PlotLink` to display the image in the worksheet.
+
+
+
+
+
 
 
 ---
