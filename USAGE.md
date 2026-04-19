@@ -355,6 +355,39 @@ RExcelBridge → Insert Plot From Selected Cell
 
 ![Description of image](docs/images/SimplePlot.jpg)
 
+## Example 2 — Dynamic Plot (ggplot, updates with F9)
+
+This version uses named Excel ranges and updates when you press F9.
+
+### Why this uses both `RPlotDataNamed` and `PlotLink`
+
+This pattern uses two function calls on purpose.
+
+`RPlotDataNamed` creates the plot and returns the image file path. It does the heavy work: sending the Excel ranges to R, building the data frame `df`, running the `ggplot2` code, and writing the image file.
+
+`PlotLink` takes that returned file path and displays the image in the worksheet.
+
+Using two cells makes recalculation more reliable in Excel. When the input data changes and you press `F9`, Excel recalculates the plot-producing cell first, then `PlotLink` refreshes from the updated image path. This is the recommended pattern for dynamic plots.
+
+### Add the VBA module `DisplayImages`
+
+To use `PlotLink`, the workbook must contain the VBA macro code.
+
+1. Open the VBA editor with `Alt+F11`
+2. In the Project pane, right-click the workbook
+3. Select `Insert` → `Module`
+4. Rename the module to `DisplayImages`
+5. Paste the `PlotLink` macro code into that module
+
+### Save as a macro-enabled workbook
+
+Because the workbook now contains VBA, save it as:
+
+```text
+Excel Macro-Enabled Workbook (*.xlsm)
+
+
+
 ---
 
 ## 11. Suggested Workflow
