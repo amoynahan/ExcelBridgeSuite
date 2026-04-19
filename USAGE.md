@@ -330,6 +330,7 @@ This is the simplest way to create a plot.
 
 1. Enter data in Excel:
 
+```
 A B
 X Y
 1 0
@@ -337,16 +338,22 @@ X Y
 3 4
 4 9
 5 16
-
+```
 
 2. In a cell, enter:
 
 ```excel
 =RPlot("plot(1:5, c(0,1,4,9,16), type='b')", "BasicPlot", 800, 600)
 ```
+![Description of image](docs/images/RPlot.jpg)
+
 3. Use the ribbon:
 
 RExcelBridge → Insert Plot From Selected Cell
+
+![Description of image](docs/images/AddinMenue.jpg)
+
+![Description of image](docs/images/SimplePlot.jpg)
 
 ---
 
