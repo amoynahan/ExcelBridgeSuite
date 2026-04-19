@@ -282,25 +282,7 @@ Then use it like a native Excel function:
 
 ## 8. Plotting
 
-Test graphical output.
-
-Example:
-
-=RPlot("plot(1:10)")
-
-or:
-
-=RPlotTest()
-
-### What happens
-
-1. R creates a PNG file  
-2. The file is saved to disk  
-3. The bridge returns or inserts the plot into Excel  
-
----
-
-## 9. plot-path.txt Behavior
+#### plot-path.txt Behavior
 
 Controls where plots are saved.
 
