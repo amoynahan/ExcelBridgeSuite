@@ -280,9 +280,7 @@ Then use it like a native Excel function:
 
 ---
 
-## 8. Plotting
-
-#### plot-path.txt Behavior
+## 8. Plot-path.txt file behavior
 
 Controls where plots are saved.
 
@@ -302,7 +300,7 @@ For consistent results, it is recommended to set this explicitly.
 
 ---
 
-## 10. Example Plot Wrapper in R
+## 9. Example Plot Wrapper in R
 
 ## Example 1 — Insert Plot Using Add-in Menu
 
