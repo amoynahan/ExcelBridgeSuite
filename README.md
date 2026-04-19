@@ -1,7 +1,5 @@
 # ExcelBridgeSuite
 
-Note: The site is in the testing phase. I will remove this note when I think it is ready.
-
 ExcelBridgeSuite is a multi-language Excel add-in framework built with Excel-DNA.
 
 Current bridges:
