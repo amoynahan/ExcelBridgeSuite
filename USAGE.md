@@ -351,7 +351,7 @@ X Y
 
 RExcelBridge → Insert Plot From Selected Cell
 
-![Description of image](docs/images/AddinMenue.jpg)
+![Description of image](docs/images/AddinMenu.jpg)
 
 ![Description of image](docs/images/SimplePlot.jpg)
 
