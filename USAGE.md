@@ -369,7 +369,7 @@ Because the workbook now contains VBA, save it as:
 Excel Macro-Enabled Workbook (*.xlsm)
 
 If you save as .xlsx, Excel will remove the VBA code.
-
+```
 ### Step 1 — Create the plot (returns image path)
 
 In cell `D2`, enter:
