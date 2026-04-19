@@ -322,20 +322,53 @@ For consistent results, it is recommended to set this explicitly.
 
 ## 10. Example Plot Wrapper in R
 
-User-defined plotting helpers can also be added to `RFunctions.R`.
+## Example 1 — Insert Plot Using Add-in Menu
 
-Example:
+This is the simplest way to create a plot.
 
-make_plot <- function(file) {  
-  png(file, width = 800, height = 600)  
-  plot(1:10, 1:10, main = "Basic Plot")  
-  dev.off()  
-  file  
-}
+### Steps
 
-Call from Excel:
+1. Enter data in Excel:
 
-=REval("make_plot('test.png')")
+A B
+X Y
+1 0
+2 1
+3 4
+4 9
+5 16
+
+
+2. In a cell, enter:
+
+```excel
+=RPlot("plot(1:5, c(0,1,4,9,16), type='b')", "BasicPlot", 800, 600)
+
+3. Use the ribbon:
+
+RExcelBridge → Insert Plot From Selected Cell
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ---
 
