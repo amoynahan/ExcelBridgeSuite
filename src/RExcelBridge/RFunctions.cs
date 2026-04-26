@@ -43,6 +43,27 @@ public static class RFunctions
         }
     }
 
+
+    [ExcelFunction(
+        Name = "RObj",
+        Description = "Mark an R object name so RCall passes the object itself instead of a literal string.",
+        Category = "RExcelBridge")]
+    public static object RObj(
+        [ExcelArgument(Name = "name", Description = "Name of the R object to pass by reference.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return RBridge.MakeObjectReference(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
     private static int ToIntOrDefault(object value, int defaultValue)
     {
         if (value is ExcelMissing || value is ExcelEmpty || value == null)
@@ -137,7 +158,7 @@ public static class RFunctions
 
     [ExcelFunction(
         Name = "RCall",
-        Description = "Call an R function with up to 10 arguments.",
+        Description = "Call an R function with up to 10 arguments. Numeric/data.frame results use fast return paths.",
         Category = "RExcelBridge")]
     public static object RCall(
         [ExcelArgument(Name = "fun", Description = "Name of the R function.")] string fun,
@@ -186,6 +207,38 @@ public static class RFunctions
         }
     }
 
+
+
+    [ExcelFunction(
+        Name = "RSetTable",
+        Description = "Assign an Excel table/range to an R data.frame using the typed table transfer path.",
+        Category = "RExcelBridge")]
+    public static object RSetTable(
+        [ExcelArgument(Name = "name", Description = "Name of the R data.frame to create.")] string name,
+        [ExcelArgument(Name = "value", Description = "Excel range to assign as a data.frame.")] object value,
+        [ExcelArgument(Name = "hasHeaders", Description = "TRUE if the first row contains column names. Default TRUE.")] object hasHeaders)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            bool headers = true;
+            if (hasHeaders is bool b)
+                headers = b;
+            else if (hasHeaders is double d)
+                headers = d != 0.0;
+            else if (hasHeaders is string s && !string.IsNullOrWhiteSpace(s))
+                headers = !(s.Equals("false", StringComparison.OrdinalIgnoreCase) || s.Equals("no", StringComparison.OrdinalIgnoreCase) || s.Equals("0", StringComparison.OrdinalIgnoreCase));
+
+            return RBridge.SetTable(name, value, headers);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
     [ExcelFunction(
         Name = "RGet",
         Description = "Return an object from the persistent R session to Excel.",
@@ -199,6 +252,62 @@ public static class RFunctions
                 return "Error: object name is blank.";
 
             return RBridge.Get(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [ExcelFunction(
+        Name = "RGetNumeric",
+        Description = "Return a numeric R vector or matrix through the fast binary double path.",
+        Category = "RExcelBridge")]
+    public static object RGetNumeric(
+        [ExcelArgument(Name = "name", Description = "Name of the numeric R object.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return RBridge.GetNumeric(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [ExcelFunction(
+        Name = "RGetTable",
+        Description = "Return an R data.frame or tibble through the typed table path.",
+        Category = "RExcelBridge")]
+    public static object RGetTable(
+        [ExcelArgument(Name = "name", Description = "Name of the R data.frame or tibble.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return RBridge.GetTable(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [ExcelFunction(
+        Name = "RLastTransfer",
+        Description = "Show the last R-to-Excel transfer method, object type, dimensions, and elapsed R export time.",
+        Category = "RExcelBridge")]
+    public static object RLastTransfer()
+    {
+        try
+        {
+            return RBridge.LastTransfer();
         }
         catch (Exception ex)
         {

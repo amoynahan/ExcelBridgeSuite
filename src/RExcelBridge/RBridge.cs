@@ -13,6 +13,12 @@ public static class RBridge
     private static StreamReader? _stdout;
     private static StreamReader? _stderr;
     private static readonly object _lock = new();
+    internal const string RObjectReferencePrefix = "__REXCEL_ROBJ__:";
+
+    public static string MakeObjectReference(string name)
+    {
+        return RObjectReferencePrefix + (name ?? string.Empty).Trim();
+    }
 
     private static string AddInDir
     {
@@ -170,6 +176,18 @@ public static class RBridge
 
     public static object Set(string name, object value)
     {
+        if (TryCreateNumericSetPayload(name, value, out Dictionary<string, object?>? fastPayload, out string? transferFile))
+        {
+            try
+            {
+                return Send(fastPayload!);
+            }
+            finally
+            {
+                TryDeleteFile(transferFile ?? string.Empty);
+            }
+        }
+
         return Send(new Dictionary<string, object?>
         {
             ["id"] = Guid.NewGuid().ToString(),
@@ -179,6 +197,28 @@ public static class RBridge
         });
     }
 
+
+    public static object SetTable(string name, object value, bool hasHeaders = true)
+    {
+        if (TryCreateTableSetPayload(name, value, hasHeaders, out Dictionary<string, object?>? payload, out List<string>? transferFiles))
+        {
+            try
+            {
+                return Send(payload!);
+            }
+            finally
+            {
+                if (transferFiles is not null)
+                {
+                    foreach (string file in transferFiles)
+                        TryDeleteFile(file);
+                }
+            }
+        }
+
+        return "Error: RSetTable expects a rectangular Excel range.";
+    }
+
     public static object Get(string name)
     {
         return Send(new Dictionary<string, object?>
@@ -186,6 +226,35 @@ public static class RBridge
             ["id"] = Guid.NewGuid().ToString(),
             ["cmd"] = "get",
             ["name"] = name
+        });
+    }
+
+    public static object GetNumeric(string name)
+    {
+        return Send(new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "get_numeric",
+            ["name"] = name
+        });
+    }
+
+    public static object GetTable(string name)
+    {
+        return Send(new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "get_table",
+            ["name"] = name
+        });
+    }
+
+    public static object LastTransfer()
+    {
+        return Send(new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "last_transfer"
         });
     }
 
@@ -606,6 +675,371 @@ public static class RBridge
         return "Rscript";
     }
 
+
+    private static bool TryCreateTableSetPayload(string name, object value, bool hasHeaders, out Dictionary<string, object?>? payload, out List<string>? transferFiles)
+    {
+        payload = null;
+        transferFiles = new List<string>();
+
+        if (!TryExtractExcelRange(value, out object?[,]? cells, out int rows, out int cols))
+            return false;
+
+        if (cells is null || rows <= 0 || cols <= 0)
+            return false;
+
+        int headerRows = hasHeaders ? 1 : 0;
+        if (rows <= headerRows)
+            return false;
+
+        int dataRows = rows - headerRows;
+        string[] names = new string[cols];
+        for (int c = 0; c < cols; c++)
+        {
+            string? raw = hasHeaders ? NormalizeScalar(cells[0, c])?.ToString() : null;
+            names[c] = string.IsNullOrWhiteSpace(raw) ? $"V{c + 1}" : raw!.Trim();
+        }
+
+        string dir = Path.Combine(Path.GetTempPath(), "RExcelBridgeTransfer");
+        Directory.CreateDirectory(dir);
+
+        var columns = new List<Dictionary<string, object?>>();
+        for (int c = 0; c < cols; c++)
+        {
+            if (ColumnIsNumeric(cells, c, headerRows, rows))
+            {
+                var values = new double[dataRows];
+                for (int r = headerRows; r < rows; r++)
+                {
+                    if (!TryConvertToDoubleOrNaN(cells[r, c], out double d, allowEmptyAsNaN: true))
+                        d = double.NaN;
+                    values[r - headerRows] = d;
+                }
+
+                string file = Path.Combine(dir, $"excel_table_col_{c + 1}_{Guid.NewGuid():N}.bin");
+                byte[] bytes = new byte[checked(values.Length * sizeof(double))];
+                Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+                File.WriteAllBytes(file, bytes);
+                transferFiles.Add(file);
+
+                columns.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = names[c],
+                    ["type"] = "numeric",
+                    ["file"] = file.Replace('\\', '/'),
+                    ["na"] = "NaN"
+                });
+            }
+            else if (ColumnIsLogical(cells, c, headerRows, rows))
+            {
+                var vals = new object?[dataRows];
+                for (int r = headerRows; r < rows; r++)
+                    vals[r - headerRows] = TryConvertToNullableBool(cells[r, c], out bool? b) ? b : null;
+
+                columns.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = names[c],
+                    ["type"] = "logical",
+                    ["values"] = vals
+                });
+            }
+            else
+            {
+                var vals = new object?[dataRows];
+                for (int r = headerRows; r < rows; r++)
+                    vals[r - headerRows] = NormalizeStringCell(cells[r, c]);
+
+                columns.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = names[c],
+                    ["type"] = "character",
+                    ["values"] = vals
+                });
+            }
+        }
+
+        payload = new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "set_table",
+            ["name"] = name,
+            ["rows"] = dataRows,
+            ["cols"] = cols,
+            ["has_headers"] = hasHeaders,
+            ["columns"] = columns
+        };
+
+        return true;
+    }
+
+    private static bool TryExtractExcelRange(object value, out object?[,]? cells, out int rows, out int cols)
+    {
+        cells = null;
+        rows = 0;
+        cols = 0;
+
+        if (value is object[,] range)
+        {
+            int rowMin = range.GetLowerBound(0);
+            int rowMax = range.GetUpperBound(0);
+            int colMin = range.GetLowerBound(1);
+            int colMax = range.GetUpperBound(1);
+            rows = rowMax - rowMin + 1;
+            cols = colMax - colMin + 1;
+            cells = new object?[rows, cols];
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    cells[r, c] = range[rowMin + r, colMin + c];
+            return true;
+        }
+
+        if (value is object[] vector)
+        {
+            rows = vector.Length;
+            cols = 1;
+            cells = new object?[rows, 1];
+            for (int r = 0; r < rows; r++)
+                cells[r, 0] = vector[r];
+            return rows > 0;
+        }
+
+        if (value is null || value is ExcelMissing || value is ExcelEmpty || value is ExcelError)
+            return false;
+
+        rows = 1;
+        cols = 1;
+        cells = new object?[1, 1];
+        cells[0, 0] = value;
+        return true;
+    }
+
+    private static bool ColumnIsNumeric(object?[,] cells, int c, int startRow, int rows)
+    {
+        bool sawValue = false;
+        for (int r = startRow; r < rows; r++)
+        {
+            if (IsBlankExcelCell(cells[r, c]))
+                continue;
+            if (!TryConvertToDoubleOrNaN(cells[r, c], out _, allowEmptyAsNaN: true))
+                return false;
+            sawValue = true;
+        }
+        return sawValue;
+    }
+
+    private static bool ColumnIsLogical(object?[,] cells, int c, int startRow, int rows)
+    {
+        bool sawValue = false;
+        for (int r = startRow; r < rows; r++)
+        {
+            if (IsBlankExcelCell(cells[r, c]))
+                continue;
+            if (!TryConvertToNullableBool(cells[r, c], out _))
+                return false;
+            sawValue = true;
+        }
+        return sawValue;
+    }
+
+    private static bool TryConvertToNullableBool(object? value, out bool? result)
+    {
+        result = null;
+        if (IsBlankExcelCell(value))
+            return true;
+        if (value is bool b)
+        {
+            result = b;
+            return true;
+        }
+        if (value is string s)
+        {
+            string t = s.Trim();
+            if (t.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || t.Equals("T", StringComparison.OrdinalIgnoreCase) || t.Equals("YES", StringComparison.OrdinalIgnoreCase))
+            {
+                result = true;
+                return true;
+            }
+            if (t.Equals("FALSE", StringComparison.OrdinalIgnoreCase) || t.Equals("F", StringComparison.OrdinalIgnoreCase) || t.Equals("NO", StringComparison.OrdinalIgnoreCase))
+            {
+                result = false;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsBlankExcelCell(object? value)
+    {
+        return value is null || value is ExcelEmpty || value is ExcelMissing || (value is string s && string.IsNullOrWhiteSpace(s));
+    }
+
+    private static object? NormalizeStringCell(object? value)
+    {
+        if (IsBlankExcelCell(value) || value is ExcelError)
+            return null;
+
+        return value switch
+        {
+            DateTime dt => dt.ToString("o", CultureInfo.InvariantCulture),
+            double d => (double.IsNaN(d) || double.IsInfinity(d)) ? null : d.ToString("G17", CultureInfo.InvariantCulture),
+            float f => (float.IsNaN(f) || float.IsInfinity(f)) ? null : ((double)f).ToString("G17", CultureInfo.InvariantCulture),
+            decimal dec => dec.ToString(CultureInfo.InvariantCulture),
+            _ => value.ToString()
+        };
+    }
+
+    private static bool TryCreateNumericSetPayload(string name, object value, out Dictionary<string, object?>? payload, out string? transferFile)
+    {
+        payload = null;
+        transferFile = null;
+
+        if (!TryFlattenNumericExcelValue(value, out double[]? values, out int rows, out int cols))
+            return false;
+
+        if (values is null || rows <= 0 || cols <= 0)
+            return false;
+
+        string dir = Path.Combine(Path.GetTempPath(), "RExcelBridgeTransfer");
+        Directory.CreateDirectory(dir);
+        transferFile = Path.Combine(dir, $"excel_numeric_{Guid.NewGuid():N}.bin");
+
+        byte[] bytes = new byte[checked(values.Length * sizeof(double))];
+        Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+        File.WriteAllBytes(transferFile, bytes);
+
+        payload = new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "set_numeric",
+            ["name"] = name,
+            ["file"] = transferFile.Replace('\\', '/'),
+            ["rows"] = rows,
+            ["cols"] = cols,
+            ["storage_order"] = "row-major-double64",
+            ["na"] = "NaN"
+        };
+
+        return true;
+    }
+
+    private static bool TryFlattenNumericExcelValue(object value, out double[]? values, out int rows, out int cols)
+    {
+        values = null;
+        rows = 0;
+        cols = 0;
+
+        if (value is null || value is ExcelMissing || value is ExcelEmpty || value is ExcelError)
+            return false;
+
+        if (TryConvertToDoubleOrNaN(value, out double scalar, allowEmptyAsNaN: false))
+        {
+            values = new[] { scalar };
+            rows = 1;
+            cols = 1;
+            return true;
+        }
+
+        if (value is object[] vector)
+        {
+            if (vector.Length == 0)
+                return false;
+
+            var tmp = new double[vector.Length];
+            bool sawAnyNumeric = false;
+            for (int i = 0; i < vector.Length; i++)
+            {
+                if (!TryConvertToDoubleOrNaN(vector[i], out tmp[i], allowEmptyAsNaN: true))
+                    return false;
+
+                if (!double.IsNaN(tmp[i]))
+                    sawAnyNumeric = true;
+            }
+
+            if (!sawAnyNumeric)
+                return false;
+
+            values = tmp;
+            rows = vector.Length;
+            cols = 1;
+            return true;
+        }
+
+        if (value is object[,] range)
+        {
+            int rowMin = range.GetLowerBound(0);
+            int rowMax = range.GetUpperBound(0);
+            int colMin = range.GetLowerBound(1);
+            int colMax = range.GetUpperBound(1);
+            rows = rowMax - rowMin + 1;
+            cols = colMax - colMin + 1;
+
+            if (rows <= 0 || cols <= 0)
+                return false;
+
+            var tmp = new double[checked(rows * cols)];
+            bool sawAnyNumeric = false;
+            int k = 0;
+
+            for (int r = rowMin; r <= rowMax; r++)
+            {
+                for (int c = colMin; c <= colMax; c++)
+                {
+                    if (!TryConvertToDoubleOrNaN(range[r, c], out double d, allowEmptyAsNaN: true))
+                        return false;
+
+                    tmp[k++] = d;
+                    if (!double.IsNaN(d))
+                        sawAnyNumeric = true;
+                }
+            }
+
+            if (!sawAnyNumeric)
+                return false;
+
+            values = tmp;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertToDoubleOrNaN(object? value, out double result, bool allowEmptyAsNaN)
+    {
+        result = double.NaN;
+
+        if (value is null || value is ExcelEmpty || value is ExcelMissing)
+            return allowEmptyAsNaN;
+
+        if (value is ExcelError)
+            return false;
+
+        switch (value)
+        {
+            case double d:
+                result = (double.IsInfinity(d) || double.IsNaN(d)) ? double.NaN : d;
+                return true;
+            case float f:
+                result = (float.IsInfinity(f) || float.IsNaN(f)) ? double.NaN : f;
+                return true;
+            case int i:
+                result = i;
+                return true;
+            case long l:
+                result = l;
+                return true;
+            case short sh:
+                result = sh;
+                return true;
+            case decimal dec:
+                result = (double)dec;
+                return true;
+            case DateTime dt:
+                result = dt.ToOADate();
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private static object[] NormalizeArgs(IEnumerable<object?> args)
     {
         var clean = new List<object>();
@@ -690,10 +1124,25 @@ public static class RBridge
             short s => (int)s,
             decimal m => m,
             bool b => b,
-            string s => s,
+            string s => NormalizeStringArgument(s),
             DateTime dt => dt.ToString("o", CultureInfo.InvariantCulture),
             _ => value.ToString()
         };
+    }
+
+    private static object NormalizeStringArgument(string value)
+    {
+        if (value.StartsWith(RObjectReferencePrefix, StringComparison.Ordinal))
+        {
+            string name = value.Substring(RObjectReferencePrefix.Length).Trim();
+            return new Dictionary<string, object?>
+            {
+                ["__rexcel_arg_type"] = "robj",
+                ["name"] = name
+            };
+        }
+
+        return value;
     }
 
     private static object ConvertJsonToExcel(JsonElement el)
@@ -706,9 +1155,118 @@ public static class RBridge
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Array => ConvertJsonArrayToExcel(el),
-            JsonValueKind.Object => el.ToString(),
+            JsonValueKind.Object => ConvertJsonObjectToExcel(el),
             _ => el.ToString()
         };
+    }
+
+    private static object ConvertJsonObjectToExcel(JsonElement el)
+    {
+        if (el.TryGetProperty("__rexcel_transfer_type", out JsonElement typeEl))
+        {
+            string? type = typeEl.GetString();
+            if (string.Equals(type, "numeric", StringComparison.OrdinalIgnoreCase))
+                return ConvertNumericTransferToExcel(el);
+
+            if (string.Equals(type, "table", StringComparison.OrdinalIgnoreCase))
+                return ConvertTableTransferToExcel(el);
+        }
+
+        return el.ToString();
+    }
+
+    private static object ConvertNumericTransferToExcel(JsonElement el)
+    {
+        string file = el.GetProperty("file").GetString() ?? string.Empty;
+        int rows = el.GetProperty("rows").GetInt32();
+        int cols = el.GetProperty("cols").GetInt32();
+
+        if (rows < 0 || cols < 0)
+            return "Error: invalid numeric transfer dimensions.";
+
+        double[] values = ReadDoubleFile(file, checked(rows * cols));
+        var output = new object[rows, cols];
+
+        // R stores matrices in column-major order. Excel expects row/column cells.
+        for (int c = 0; c < cols; c++)
+        {
+            for (int r = 0; r < rows; r++)
+            {
+                double v = values[r + c * rows];
+                output[r, c] = double.IsNaN(v) ? ExcelEmpty.Value : v;
+            }
+        }
+
+        TryDeleteFile(file);
+        return output;
+    }
+
+    private static object ConvertTableTransferToExcel(JsonElement el)
+    {
+        int rows = el.GetProperty("rows").GetInt32();
+        int cols = el.GetProperty("cols").GetInt32();
+        bool includeHeaders = !el.TryGetProperty("include_headers", out JsonElement includeEl) || includeEl.GetBoolean();
+        int rowOffset = includeHeaders ? 1 : 0;
+        var output = new object[rows + rowOffset, cols];
+
+        JsonElement columnsEl = el.GetProperty("columns");
+        for (int c = 0; c < cols; c++)
+        {
+            JsonElement colEl = columnsEl[c];
+            string name = colEl.GetProperty("name").GetString() ?? string.Empty;
+            string type = colEl.GetProperty("type").GetString() ?? "character";
+
+            if (includeHeaders)
+                output[0, c] = name;
+
+            if (string.Equals(type, "numeric", StringComparison.OrdinalIgnoreCase))
+            {
+                string file = colEl.GetProperty("file").GetString() ?? string.Empty;
+                double[] values = ReadDoubleFile(file, rows);
+                for (int r = 0; r < rows; r++)
+                    output[r + rowOffset, c] = double.IsNaN(values[r]) ? ExcelEmpty.Value : values[r];
+                TryDeleteFile(file);
+            }
+            else
+            {
+                JsonElement valuesEl = colEl.GetProperty("values");
+                for (int r = 0; r < rows; r++)
+                    output[r + rowOffset, c] = ConvertJsonToExcel(valuesEl[r]);
+            }
+        }
+
+        return output;
+    }
+
+    private static double[] ReadDoubleFile(string file, int expectedCount)
+    {
+        if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+            throw new FileNotFoundException("R transfer file was not found.", file);
+
+        long expectedBytes = (long)expectedCount * sizeof(double);
+        var info = new FileInfo(file);
+        if (info.Length < expectedBytes)
+            throw new InvalidDataException($"R transfer file is too short. Expected {expectedBytes} bytes, found {info.Length}.");
+
+        byte[] bytes = File.ReadAllBytes(file);
+        if (bytes.Length < expectedBytes)
+            throw new InvalidDataException($"R transfer file is too short. Expected {expectedBytes} bytes, read {bytes.Length}.");
+
+        double[] values = new double[expectedCount];
+        Buffer.BlockCopy(bytes, 0, values, 0, checked(expectedCount * sizeof(double)));
+        return values;
+    }
+
+    private static void TryDeleteFile(string file)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(file) && File.Exists(file))
+                File.Delete(file);
+        }
+        catch
+        {
+        }
     }
 
     private static object ConvertJsonArrayToExcel(JsonElement el)

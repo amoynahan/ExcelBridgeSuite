@@ -13,6 +13,12 @@ public static class JBridge
     private static StreamReader? _stdout;
     private static StreamReader? _stderr;
     private static readonly object _lock = new();
+    internal const string JuliaObjectReferencePrefix = "__JEXCEL_JOBJ__:";
+
+    public static string MakeObjectReference(string name)
+    {
+        return JuliaObjectReferencePrefix + (name ?? string.Empty).Trim();
+    }
 
     private static string AddInDir
     {
@@ -170,6 +176,12 @@ public static class JBridge
 
     public static object Set(string name, object value)
     {
+        if (TryCreateNumericSetPayload(name, value, out Dictionary<string, object?>? payload, out string? file))
+        {
+            try { return Send(payload!); }
+            finally { TryDeleteFile(file ?? string.Empty); }
+        }
+
         return Send(new Dictionary<string, object?>
         {
             ["id"] = Guid.NewGuid().ToString(),
@@ -187,6 +199,50 @@ public static class JBridge
             ["cmd"] = "get",
             ["name"] = name
         });
+    }
+
+    public static object GetNumeric(string name)
+    {
+        return Send(new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "get_numeric",
+            ["name"] = name
+        });
+    }
+
+    public static object GetTable(string name)
+    {
+        return Send(new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "get_table",
+            ["name"] = name
+        });
+    }
+
+    public static object LastTransfer()
+    {
+        return Send(new Dictionary<string, object?>
+        {
+            ["id"] = Guid.NewGuid().ToString(),
+            ["cmd"] = "last_transfer"
+        });
+    }
+
+    public static object SetTable(string name, object value, bool hasHeaders = true)
+    {
+        if (TryCreateTableSetPayload(name, value, hasHeaders, out Dictionary<string, object?>? payload, out List<string>? files))
+        {
+            try { return Send(payload!); }
+            finally
+            {
+                if (files is not null)
+                    foreach (string f in files) TryDeleteFile(f);
+            }
+        }
+
+        return "Error: JSetTable expects a rectangular Excel range.";
     }
 
     public static object Exists(string name)
@@ -600,8 +656,27 @@ private static string GetJuliaPath()
         return clean.ToArray();
     }
 
+    private static object CoerceExcelReference(object value)
+    {
+        if (value is ExcelReference reference)
+        {
+            try
+            {
+                return XlCall.Excel(XlCall.xlCoerce, reference);
+            }
+            catch
+            {
+                return value;
+            }
+        }
+
+        return value;
+    }
+
     private static object NormalizeExcelValue(object value)
     {
+        value = CoerceExcelReference(value);
+
         if (value is object[,] range)
         {
             int rowMin = range.GetLowerBound(0);
@@ -660,6 +735,12 @@ private static string GetJuliaPath()
             long l => l,
             short s => (int)s,
             bool b => b,
+            string s when s.StartsWith(JuliaObjectReferencePrefix, StringComparison.Ordinal) =>
+                new Dictionary<string, object?>
+                {
+                    ["__jexcel_arg_type"] = "jobj",
+                    ["name"] = s.Substring(JuliaObjectReferencePrefix.Length)
+                },
             string s => s,
             DateTime dt => dt.ToString("o", CultureInfo.InvariantCulture),
             _ => value.ToString()
@@ -676,7 +757,7 @@ private static string GetJuliaPath()
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Array => ConvertJsonArrayToExcel(el),
-            JsonValueKind.Object => el.ToString(),
+            JsonValueKind.Object => ConvertJsonObjectToExcel(el),
             _ => el.ToString()
         };
     }
@@ -710,4 +791,119 @@ private static string GetJuliaPath()
 
         return outArr;
     }
+
+    private static bool TryCreateNumericSetPayload(string name, object value, out Dictionary<string, object?>? payload, out string? file)
+    {
+        payload = null;
+        file = null;
+        if (!TryFlattenNumericRange(value, out double[]? values, out int rows, out int cols))
+            return false;
+        file = Path.Combine(Path.GetTempPath(), $"jexcel_set_numeric_{Guid.NewGuid():N}.bin");
+        byte[] bytes = new byte[values!.Length * sizeof(double)];
+        Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+        File.WriteAllBytes(file, bytes);
+        payload = new Dictionary<string, object?> { ["id"] = Guid.NewGuid().ToString(), ["cmd"] = "set_numeric", ["name"] = name, ["file"] = file, ["rows"] = rows, ["cols"] = cols };
+        return true;
+    }
+
+    private static bool TryFlattenNumericRange(object value, out double[]? values, out int rows, out int cols)
+    {
+        value = CoerceExcelReference(value);
+        values = null; rows = 0; cols = 0;
+        if (value is double d) { values = new[] { d }; rows = 1; cols = 1; return true; }
+        if (value is object[,] range)
+        {
+            int r0 = range.GetLowerBound(0), r1 = range.GetUpperBound(0);
+            int c0 = range.GetLowerBound(1), c1 = range.GetUpperBound(1);
+            rows = r1 - r0 + 1; cols = c1 - c0 + 1; values = new double[rows * cols]; int k = 0;
+            for (int r = r0; r <= r1; r++) for (int c = c0; c <= c1; c++)
+            {
+                object cell = range[r, c];
+                if (cell is ExcelEmpty or ExcelMissing || cell is null) values[k++] = double.NaN;
+                else if (cell is double x) values[k++] = x;
+                else if (cell is int i) values[k++] = i;
+                else if (cell is long l) values[k++] = l;
+                else if (cell is decimal m) values[k++] = (double)m;
+                else return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryCreateTableSetPayload(string name, object value, bool hasHeaders, out Dictionary<string, object?>? payload, out List<string>? files)
+    {
+        value = CoerceExcelReference(value);
+        payload = null; files = new List<string>();
+        if (value is not object[,] range) return false;
+        int r0 = range.GetLowerBound(0), r1 = range.GetUpperBound(0);
+        int c0 = range.GetLowerBound(1), c1 = range.GetUpperBound(1);
+        int cols = c1 - c0 + 1; int dataStart = hasHeaders ? r0 + 1 : r0; int rows = r1 - dataStart + 1; if (rows < 0) rows = 0;
+        var columns = new List<Dictionary<string, object?>>();
+        for (int c = c0; c <= c1; c++)
+        {
+            string colName = hasHeaders ? Convert.ToString(range[r0, c], CultureInfo.InvariantCulture) ?? string.Empty : $"V{c - c0 + 1}";
+            if (string.IsNullOrWhiteSpace(colName)) colName = $"V{c - c0 + 1}";
+            bool numeric = true; var nums = new double[rows]; var vals = new List<object?>();
+            for (int r = dataStart; r <= r1; r++)
+            {
+                object cell = range[r, c];
+                if (cell is ExcelEmpty or ExcelMissing || cell is null) { nums[r - dataStart] = double.NaN; vals.Add(null); }
+                else if (cell is double x) { nums[r - dataStart] = x; vals.Add(x); }
+                else if (cell is int i) { nums[r - dataStart] = i; vals.Add(i); }
+                else if (cell is long l) { nums[r - dataStart] = l; vals.Add(l); }
+                else if (cell is decimal m) { nums[r - dataStart] = (double)m; vals.Add((double)m); }
+                else { numeric = false; vals.Add(NormalizeScalar(cell)); }
+            }
+            if (numeric)
+            {
+                string f = Path.Combine(Path.GetTempPath(), $"jexcel_set_table_{Guid.NewGuid():N}.bin");
+                byte[] bytes = new byte[nums.Length * sizeof(double)]; Buffer.BlockCopy(nums, 0, bytes, 0, bytes.Length); File.WriteAllBytes(f, bytes); files.Add(f);
+                columns.Add(new Dictionary<string, object?> { ["name"] = colName, ["type"] = "numeric", ["file"] = f, ["na"] = "NaN" });
+            }
+            else columns.Add(new Dictionary<string, object?> { ["name"] = colName, ["type"] = "character", ["values"] = vals });
+        }
+        payload = new Dictionary<string, object?> { ["id"] = Guid.NewGuid().ToString(), ["cmd"] = "set_table", ["name"] = name, ["rows"] = rows, ["cols"] = cols, ["columns"] = columns };
+        return true;
+    }
+
+    private static object ConvertJsonObjectToExcel(JsonElement el)
+    {
+        if (el.TryGetProperty("__jexcel_transfer_type", out JsonElement typeEl))
+        {
+            string type = typeEl.GetString() ?? string.Empty;
+            if (string.Equals(type, "numeric", StringComparison.OrdinalIgnoreCase)) return ConvertNumericTransferToExcel(el);
+            if (string.Equals(type, "table", StringComparison.OrdinalIgnoreCase)) return ConvertTableTransferToExcel(el);
+        }
+        return el.ToString();
+    }
+
+    private static object ConvertNumericTransferToExcel(JsonElement el)
+    {
+        string file = el.GetProperty("file").GetString() ?? string.Empty; int rows = el.GetProperty("rows").GetInt32(); int cols = el.GetProperty("cols").GetInt32();
+        double[] data = ReadDoubleFile(file, rows * cols); var output = new object[rows, cols]; int k = 0;
+        for (int r = 0; r < rows; r++) for (int c = 0; c < cols; c++) { double v = data[k++]; output[r, c] = double.IsNaN(v) ? ExcelEmpty.Value : v; }
+        TryDeleteFile(file); return output;
+    }
+
+    private static object ConvertTableTransferToExcel(JsonElement el)
+    {
+        int rows = el.GetProperty("rows").GetInt32(); int cols = el.GetProperty("cols").GetInt32(); bool includeHeaders = !el.TryGetProperty("include_headers", out JsonElement includeEl) || includeEl.GetBoolean(); int offset = includeHeaders ? 1 : 0;
+        var output = new object[rows + offset, cols]; JsonElement columns = el.GetProperty("columns");
+        for (int c = 0; c < cols; c++)
+        {
+            JsonElement col = columns[c]; string colName = col.GetProperty("name").GetString() ?? string.Empty; string colType = col.GetProperty("type").GetString() ?? "character"; if (includeHeaders) output[0, c] = colName;
+            if (string.Equals(colType, "numeric", StringComparison.OrdinalIgnoreCase))
+            { string f = col.GetProperty("file").GetString() ?? string.Empty; double[] data = ReadDoubleFile(f, rows); for (int r = 0; r < rows; r++) output[r + offset, c] = double.IsNaN(data[r]) ? ExcelEmpty.Value : data[r]; TryDeleteFile(f); }
+            else { JsonElement values = col.GetProperty("values"); for (int r = 0; r < rows; r++) output[r + offset, c] = ConvertJsonToExcel(values[r]); }
+        }
+        return output;
+    }
+
+    private static double[] ReadDoubleFile(string file, int expectedCount)
+    { byte[] bytes = File.ReadAllBytes(file); double[] values = new double[expectedCount]; Buffer.BlockCopy(bytes, 0, values, 0, checked(expectedCount * sizeof(double))); return values; }
+
+    private static void TryDeleteFile(string file)
+    { try { if (!string.IsNullOrWhiteSpace(file) && File.Exists(file)) File.Delete(file); } catch { } }
+
 }

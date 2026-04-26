@@ -43,6 +43,27 @@ public static class PFunctions
         }
     }
 
+
+    [ExcelFunction(
+        Name = "PyObj",
+        Description = "Mark a Python object name so PCall passes the object itself instead of a literal string.",
+        Category = "PythonExcelBridge")]
+    public static object PyObj(
+        [ExcelArgument(Name = "name", Description = "Name of the Python object to pass by reference.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return PythonBridge.MakeObjectReference(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
     private static int ToIntOrDefault(object value, int defaultValue)
     {
         if (value is ExcelMissing || value is ExcelEmpty || value == null)
@@ -137,7 +158,7 @@ public static class PFunctions
 
     [ExcelFunction(
         Name = "PCall",
-        Description = "Call a Python function with up to 10 arguments.",
+        Description = "Call a Python function with up to 10 arguments. NumPy/DataFrame results use fast return paths.",
         Category = "PythonExcelBridge")]
     public static object PCall(
         [ExcelArgument(Name = "fun", Description = "Name of the Python function.")] string fun,
@@ -186,6 +207,37 @@ public static class PFunctions
         }
     }
 
+
+    [ExcelFunction(
+        Name = "PSetTable",
+        Description = "Assign an Excel table/range to a pandas DataFrame using the typed table transfer path.",
+        Category = "PythonExcelBridge")]
+    public static object PSetTable(
+        [ExcelArgument(Name = "name", Description = "Name of the pandas DataFrame to create.")] string name,
+        [ExcelArgument(Name = "value", Description = "Excel range to assign as a DataFrame.")] object value,
+        [ExcelArgument(Name = "hasHeaders", Description = "TRUE if the first row contains column names. Default TRUE.")] object hasHeaders)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            bool headers = true;
+            if (hasHeaders is bool b)
+                headers = b;
+            else if (hasHeaders is double d)
+                headers = d != 0.0;
+            else if (hasHeaders is string st && !string.IsNullOrWhiteSpace(st))
+                headers = !(st.Equals("false", StringComparison.OrdinalIgnoreCase) || st.Equals("no", StringComparison.OrdinalIgnoreCase) || st.Equals("0", StringComparison.OrdinalIgnoreCase));
+
+            return PythonBridge.SetTable(name, value, headers);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
     [ExcelFunction(
         Name = "PGet",
         Description = "Return an object from the persistent Python session to Excel.",
@@ -199,6 +251,63 @@ public static class PFunctions
                 return "Error: object name is blank.";
 
             return PythonBridge.Get(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+
+    [ExcelFunction(
+        Name = "PGetNumeric",
+        Description = "Return a NumPy numeric array/vector through the fast binary double path.",
+        Category = "PythonExcelBridge")]
+    public static object PGetNumeric(
+        [ExcelArgument(Name = "name", Description = "Name of the numeric Python object.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return PythonBridge.GetNumeric(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [ExcelFunction(
+        Name = "PGetTable",
+        Description = "Return a pandas DataFrame through the typed table path.",
+        Category = "PythonExcelBridge")]
+    public static object PGetTable(
+        [ExcelArgument(Name = "name", Description = "Name of the pandas DataFrame.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return PythonBridge.GetTable(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [ExcelFunction(
+        Name = "PLastTransfer",
+        Description = "Show the last Python transfer method, object type, dimensions, and elapsed export time.",
+        Category = "PythonExcelBridge")]
+    public static object PLastTransfer()
+    {
+        try
+        {
+            return PythonBridge.LastTransfer();
         }
         catch (Exception ex)
         {

@@ -97,6 +97,11 @@ def convert_json_value(x: Any) -> Any:
             return vector_from_json(converted)
         return converted
     if isinstance(x, dict):
+        if x.get("__pyexcel_arg_type") == "pyobj":
+            nm = str(x.get("name", "")).strip()
+            if not nm:
+                raise ValueError("PyObj argument had a blank object name.")
+            return resolve_object(nm)
         return {str(k): convert_json_value(v) for k, v in x.items()}
     return x
 
@@ -264,6 +269,193 @@ def source_file(path: str) -> bool:
     return True
 
 
+# --- Fast transfer helpers added by ChatGPT ---
+import time
+import tempfile
+
+LAST_TRANSFER: dict[str, Any] = {
+    "method": "none",
+    "source": "startup",
+    "name": "",
+    "class": "",
+    "rows": 0,
+    "cols": 0,
+    "elapsed_ms": 0.0,
+}
+
+
+def _pxb_transfer_dir() -> Path:
+    d = Path(tempfile.gettempdir()) / "PythonExcelBridgeTransfer"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _set_last_transfer(method: str, source: str, name: str, obj: Any, rows: int, cols: int, elapsed_ms: float) -> None:
+    LAST_TRANSFER.update({
+        "method": method,
+        "source": source,
+        "name": name or "",
+        "class": obj.__class__.__name__ if obj is not None else "None",
+        "rows": int(rows),
+        "cols": int(cols),
+        "elapsed_ms": round(float(elapsed_ms), 3),
+    })
+
+
+def last_transfer_table() -> list[list[Any]]:
+    return [["Field", "Value"], *[[k, v] for k, v in LAST_TRANSFER.items()]]
+
+
+def _resolve_named_object(name: str) -> Any:
+    if name in OBJECT_STORE:
+        return OBJECT_STORE[name]
+    if name in globals():
+        return globals()[name]
+    raise KeyError(f"Object '{name}' was not found.")
+
+
+def _is_numpy_numeric_array(x: Any) -> bool:
+    try:
+        import numpy as np  # type: ignore
+        return isinstance(x, np.ndarray) and np.issubdtype(x.dtype, np.number)
+    except Exception:
+        return False
+
+
+def _as_numeric_array(x: Any):
+    import numpy as np  # type: ignore
+    if isinstance(x, np.ndarray):
+        if not np.issubdtype(x.dtype, np.number):
+            raise TypeError("Object is not a numeric NumPy array.")
+        arr = x.astype("float64", copy=False)
+    elif isinstance(x, (list, tuple)):
+        arr = np.asarray(x, dtype="float64")
+    elif isinstance(x, (int, float)) and not isinstance(x, bool):
+        arr = np.asarray([[float(x)]], dtype="float64")
+    else:
+        raise TypeError("Object is not numeric.")
+
+    if arr.ndim == 0:
+        arr = arr.reshape(1, 1)
+    elif arr.ndim == 1:
+        arr = arr.reshape(arr.shape[0], 1)
+    elif arr.ndim == 2:
+        pass
+    else:
+        raise TypeError("Only numeric scalars, vectors, and 2D arrays are supported for fast numeric transfer.")
+    return arr
+
+
+def export_numeric_object(x: Any, source: str = "numeric", name: str = "") -> dict[str, Any]:
+    t0 = time.perf_counter()
+    arr = _as_numeric_array(x)
+    rows, cols = int(arr.shape[0]), int(arr.shape[1])
+    file = _pxb_transfer_dir() / f"python_numeric_{os.getpid()}_{time.time_ns()}.bin"
+    # C-order matches Excel row-major reconstruction in C#.
+    arr.astype("float64", copy=False).ravel(order="C").tofile(str(file))
+    elapsed = (time.perf_counter() - t0) * 1000
+    _set_last_transfer("numeric", source, name, x, rows, cols, elapsed)
+    return {
+        "__pyexcel_transfer_type": "numeric",
+        "file": str(file).replace("\\", "/"),
+        "rows": rows,
+        "cols": cols,
+        "storage_order": "row-major-double64",
+        "na": "NaN",
+    }
+
+
+def _is_pandas_dataframe(x: Any) -> bool:
+    try:
+        import pandas as pd  # type: ignore
+        return isinstance(x, pd.DataFrame)
+    except Exception:
+        return False
+
+
+def export_table_object(x: Any, source: str = "table", name: str = "") -> dict[str, Any]:
+    import numpy as np  # type: ignore
+    import pandas as pd  # type: ignore
+    t0 = time.perf_counter()
+    if not isinstance(x, pd.DataFrame):
+        raise TypeError("Object is not a pandas DataFrame.")
+    rows, cols = int(x.shape[0]), int(x.shape[1])
+    columns: list[dict[str, Any]] = []
+    transfer_dir = _pxb_transfer_dir()
+    for col_name in x.columns:
+        s = x[col_name]
+        name_str = str(col_name)
+        if pd.api.types.is_numeric_dtype(s):
+            vals = s.astype("float64").to_numpy(copy=False)
+            file = transfer_dir / f"python_table_col_{os.getpid()}_{time.time_ns()}_{len(columns)}.bin"
+            np.asarray(vals, dtype="float64").tofile(str(file))
+            columns.append({"name": name_str, "type": "numeric", "file": str(file).replace("\\", "/"), "na": "NaN"})
+        elif pd.api.types.is_bool_dtype(s):
+            vals = [None if pd.isna(v) else bool(v) for v in s.tolist()]
+            columns.append({"name": name_str, "type": "logical", "values": vals})
+        else:
+            vals = [None if pd.isna(v) else str(v) for v in s.tolist()]
+            columns.append({"name": name_str, "type": "character", "values": vals})
+    elapsed = (time.perf_counter() - t0) * 1000
+    _set_last_transfer("typed table", source, name, x, rows, cols, elapsed)
+    return {
+        "__pyexcel_transfer_type": "table",
+        "rows": rows,
+        "cols": cols,
+        "include_headers": True,
+        "columns": columns,
+    }
+
+
+def coerce_for_transport(x: Any, source: str = "general", name: str = "") -> Any:
+    try:
+        if _is_numpy_numeric_array(x):
+            return export_numeric_object(x, source=source, name=name)
+    except Exception:
+        raise
+    try:
+        if _is_pandas_dataframe(x):
+            return export_table_object(x, source=source, name=name)
+    except Exception:
+        raise
+    return coerce_for_json(x)
+
+
+def set_numeric_from_file(name: str, file: str, rows: int, cols: int) -> bool:
+    import numpy as np  # type: ignore
+    t0 = time.perf_counter()
+    arr = np.fromfile(file, dtype="float64", count=int(rows) * int(cols)).reshape((int(rows), int(cols)), order="C")
+    OBJECT_STORE[name] = arr
+    globals()[name] = arr
+    elapsed = (time.perf_counter() - t0) * 1000
+    _set_last_transfer("numeric to Python", "PSet", name, arr, rows, cols, elapsed)
+    return True
+
+
+def set_table_from_payload(name: str, rows: int, cols: int, columns: list[dict[str, Any]]) -> bool:
+    import numpy as np  # type: ignore
+    import pandas as pd  # type: ignore
+    t0 = time.perf_counter()
+    data: dict[str, Any] = {}
+    for col in columns:
+        col_name = str(col.get("name", f"V{len(data)+1}"))
+        col_type = str(col.get("type", "character"))
+        if col_type == "numeric":
+            file = str(col.get("file", ""))
+            data[col_name] = np.fromfile(file, dtype="float64", count=int(rows))
+        elif col_type == "logical":
+            data[col_name] = col.get("values", [])
+        else:
+            data[col_name] = col.get("values", [])
+    df = pd.DataFrame(data)
+    OBJECT_STORE[name] = df
+    globals()[name] = df
+    elapsed = (time.perf_counter() - t0) * 1000
+    _set_last_transfer("typed table to Python", "PSetTable", name, df, rows, cols, elapsed)
+    return True
+# --- end fast transfer helpers ---
+
+
 def handle_request(req: dict[str, Any]) -> dict[str, Any]:
     request_id = req.get("id")
     cmd = req.get("cmd", "")
@@ -279,7 +471,8 @@ def handle_request(req: dict[str, Any]) -> dict[str, Any]:
             code = req.get("code")
             if not isinstance(code, str):
                 raise ValueError("code is missing.")
-            return make_ok(request_id, eval_code_for_excel(code))
+            result = eval_code_for_excel(code)
+            return make_ok(request_id, coerce_for_transport(result, source="PEval", name=""))
         if cmd == "plot":
             code = req.get("code")
             file = req.get("file")
@@ -297,7 +490,8 @@ def handle_request(req: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("fun is missing.")
             fun = resolve_function(fun_name)
             args = normalize_call_args(req.get("args", []))
-            return make_ok(request_id, coerce_for_json(fun(*args)))
+            result = fun(*args)
+            return make_ok(request_id, coerce_for_transport(result, source="PCall", name=fun_name))
         if cmd == "set":
             name = req.get("name")
             if not isinstance(name, str):
@@ -311,10 +505,38 @@ def handle_request(req: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(name, str):
                 raise ValueError("name is missing.")
             if name in OBJECT_STORE:
-                return make_ok(request_id, coerce_for_json(OBJECT_STORE[name]))
+                return make_ok(request_id, coerce_for_transport(OBJECT_STORE[name], source="PGet", name=name))
             if name in globals():
-                return make_ok(request_id, coerce_for_json(globals()[name]))
+                return make_ok(request_id, coerce_for_transport(globals()[name], source="PGet", name=name))
             raise KeyError(f"Object '{name}' was not found.")
+        if cmd == "set_numeric":
+            name = req.get("name")
+            file = req.get("file")
+            rows = int(req.get("rows", 0))
+            cols = int(req.get("cols", 0))
+            if not isinstance(name, str) or not isinstance(file, str):
+                raise ValueError("name or file is missing.")
+            return make_ok(request_id, set_numeric_from_file(name, file, rows, cols))
+        if cmd == "get_numeric":
+            name = req.get("name")
+            if not isinstance(name, str):
+                raise ValueError("name is missing.")
+            return make_ok(request_id, export_numeric_object(_resolve_named_object(name), source="PGetNumeric", name=name))
+        if cmd == "set_table":
+            name = req.get("name")
+            rows = int(req.get("rows", 0))
+            cols = int(req.get("cols", 0))
+            columns = req.get("columns", [])
+            if not isinstance(name, str) or not isinstance(columns, list):
+                raise ValueError("name or columns is missing.")
+            return make_ok(request_id, set_table_from_payload(name, rows, cols, columns))
+        if cmd == "get_table":
+            name = req.get("name")
+            if not isinstance(name, str):
+                raise ValueError("name is missing.")
+            return make_ok(request_id, export_table_object(_resolve_named_object(name), source="PGetTable", name=name))
+        if cmd == "last_transfer":
+            return make_ok(request_id, last_transfer_table())
         if cmd == "exists":
             name = req.get("name")
             if not isinstance(name, str):

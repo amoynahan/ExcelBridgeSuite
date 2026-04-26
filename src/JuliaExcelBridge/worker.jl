@@ -127,6 +127,13 @@ function convert_json_value(x)
         else
             return converted
         end
+    elseif x isa AbstractDict
+        if get(x, "__jexcel_arg_type", nothing) == "jobj"
+            nm = strip(String(get(x, "name", "")))
+            isempty(nm) && error("JObj argument had a blank object name.")
+            return resolve_object(nm)
+        end
+        return Dict(string(k) => convert_json_value(v) for (k, v) in pairs(x))
     else
         return x
     end
@@ -134,23 +141,41 @@ end
 
 normalize_call_args(args) = args isa Vector ? map(convert_json_value, args) : [convert_json_value(args)]
 
-function resolve_function(fun_name::AbstractString)
-    if occursin(".", fun_name)
-        parts = split(fun_name, ".")
-        obj = getfield(Main, Symbol(parts[1]))
+function resolve_object(name::AbstractString)
+    nm = String(name)
+    if occursin(".", nm)
+        parts = split(nm, ".")
+        obj = if isdefined(Main, Symbol(parts[1]))
+            getfield(Main, Symbol(parts[1]))
+        elseif haskey(OBJECT_STORE, parts[1])
+            OBJECT_STORE[parts[1]]
+        elseif isdefined(Base, Symbol(parts[1]))
+            getfield(Base, Symbol(parts[1]))
+        else
+            error("Object not found: " * parts[1])
+        end
+
         for p in parts[2:end]
-            obj = getfield(obj, Symbol(p))
+            obj = getproperty(obj, Symbol(p))
         end
         return obj
     end
 
-    if isdefined(Main, Symbol(fun_name))
-        return getfield(Main, Symbol(fun_name))
-    elseif isdefined(Base, Symbol(fun_name))
-        return getfield(Base, Symbol(fun_name))
+    if haskey(OBJECT_STORE, nm)
+        return OBJECT_STORE[nm]
+    elseif isdefined(Main, Symbol(nm))
+        return getfield(Main, Symbol(nm))
+    elseif isdefined(Base, Symbol(nm))
+        return getfield(Base, Symbol(nm))
     else
-        error("Function not found: " * fun_name)
+        error("Object not found: " * nm)
     end
+end
+
+function resolve_function(fun_name::AbstractString)
+    obj = resolve_object(fun_name)
+    obj isa Function || error("Function not callable: " * String(fun_name))
+    return obj
 end
 
 function coerce_for_json(x)
@@ -170,7 +195,7 @@ function coerce_for_json(x)
         return [coerce_for_json(v) for v in x]
     elseif x isa NamedTuple
         return Dict(String(k) => coerce_for_json(v) for (k, v) in pairs(x))
-    elseif x isa Dict
+    elseif x isa AbstractDict
         return Dict(string(k) => coerce_for_json(v) for (k, v) in pairs(x))
     else
         return string(x)
@@ -188,6 +213,8 @@ end
 function format_dim(x)
     if x isa AbstractArray
         return join(size(x), " x ")
+    elseif is_dataframe_like(x)
+        return string(nrow_df(x), " x ", ncol_df(x))
     else
         return "1 x 1"
     end
@@ -232,10 +259,298 @@ function render_plot_to_file(code, file, width=800, height=600)
     return normpath(file)
 end
 
+
+# --- Fast transfer helpers ---
+using Dates
+using UUIDs
+
+const LAST_TRANSFER = Dict{String, Any}(
+    "method" => "none",
+    "source" => "startup",
+    "name" => "",
+    "class" => "",
+    "rows" => 0,
+    "cols" => 0,
+    "elapsed_ms" => 0.0
+)
+
+function _set_last_transfer(method::AbstractString, source::AbstractString, name::AbstractString, obj, rows::Integer, cols::Integer, elapsed_ms)
+    LAST_TRANSFER["method"] = String(method)
+    LAST_TRANSFER["source"] = String(source)
+    LAST_TRANSFER["name"] = String(name)
+    LAST_TRANSFER["class"] = string(typeof(obj))
+    LAST_TRANSFER["rows"] = Int(rows)
+    LAST_TRANSFER["cols"] = Int(cols)
+    LAST_TRANSFER["elapsed_ms"] = round(Float64(elapsed_ms); digits=3)
+end
+
+function last_transfer_table()
+    rows = Any[["Field", "Value"]]
+    for k in ["method", "source", "name", "class", "rows", "cols", "elapsed_ms"]
+        push!(rows, [k, LAST_TRANSFER[k]])
+    end
+    return rows
+end
+
+function _transfer_dir()
+    d = joinpath(tempdir(), "JuliaExcelBridgeTransfer")
+    mkpath(d)
+    return d
+end
+
+function _resolve_named_object(name::AbstractString)
+    return resolve_object(name)
+end
+
+function _array_shape_for_excel(x)
+    if x isa AbstractMatrix
+        return size(x, 1), size(x, 2)
+    elseif x isa AbstractVector
+        return length(x), 1
+    elseif x isa Number
+        return 1, 1
+    else
+        return 0, 0
+    end
+end
+
+function is_numeric_exportable(x)
+    x isa Number || x isa AbstractArray{<:Number}
+end
+
+function export_numeric_object(x; source="JGetNumeric", name="")
+    t0 = time()
+    rows, cols = _array_shape_for_excel(x)
+    rows > 0 && cols > 0 || error("Object is not a numeric scalar/vector/matrix.")
+
+    file = joinpath(_transfer_dir(), "jexcel_get_numeric_" * string(uuid4()) * ".bin")
+    open(file, "w") do io
+        if x isa Number
+            write(io, Float64(x))
+        elseif x isa AbstractVector
+            for r in eachindex(x)
+                v = x[r]
+                write(io, ismissing(v) ? NaN : Float64(v))
+            end
+        else
+            for r in 1:rows, c in 1:cols
+                v = x[r, c]
+                write(io, ismissing(v) ? NaN : Float64(v))
+            end
+        end
+    end
+    elapsed = (time() - t0) * 1000.0
+    _set_last_transfer("numeric", source, String(name), x, rows, cols, elapsed)
+    return Dict("__jexcel_transfer_type" => "numeric", "file" => file, "rows" => rows, "cols" => cols, "class" => string(typeof(x)))
+end
+
+function set_numeric_from_file(name::AbstractString, file::AbstractString, rows::Integer, cols::Integer)
+    t0 = time()
+    values = Vector{Float64}(undef, Int(rows) * Int(cols))
+    open(file, "r") do io
+        read!(io, values)
+    end
+    arr = Matrix{Float64}(undef, Int(rows), Int(cols))
+    k = 1
+    for r in 1:Int(rows), c in 1:Int(cols)
+        arr[r, c] = values[k]
+        k += 1
+    end
+    OBJECT_STORE[String(name)] = arr
+    Core.eval(Main, :($(Symbol(name)) = OBJECT_STORE[$(String(name))]))
+    elapsed = (time() - t0) * 1000.0
+    _set_last_transfer("numeric to Julia", "JSet", String(name), arr, rows, cols, elapsed)
+    return true
+end
+
+function _try_import_dataframes()
+    try
+        Base.require(Main, :DataFrames)
+        return getfield(Main, :DataFrames)
+    catch
+        try
+            Core.eval(Main, :(using DataFrames))
+            return getfield(Main, :DataFrames)
+        catch e
+            error("DataFrames.jl is required for table transfer. In Julia run: using Pkg; Pkg.add(\"DataFrames\")")
+        end
+    end
+end
+
+function is_dataframe_like(x)
+    occursin("DataFrame", string(typeof(x)))
+end
+
+function nrow_df(x)
+    try
+        return Int(getfield(_try_import_dataframes(), :nrow)(x))
+    catch
+        return size(x, 1)
+    end
+end
+
+function ncol_df(x)
+    try
+        return Int(getfield(_try_import_dataframes(), :ncol)(x))
+    catch
+        return size(x, 2)
+    end
+end
+
+function table_column_names(x)
+    return [String(nm) for nm in propertynames(x)]
+end
+
+function export_table_object(x; source="JGetTable", name="")
+    t0 = time()
+    is_dataframe_like(x) || error("Object is not a DataFrame.")
+    rows = nrow_df(x)
+    colnames = table_column_names(x)
+    cols = length(colnames)
+    columns = Any[]
+
+    for cname in colnames
+        col = x[!, Symbol(cname)]
+        nonmissing = [v for v in col if !ismissing(v)]
+        if all(v -> v isa Number, nonmissing)
+            vals = Vector{Float64}(undef, rows)
+            for i in 1:rows
+                vals[i] = ismissing(col[i]) ? NaN : Float64(col[i])
+            end
+            file = joinpath(_transfer_dir(), "jexcel_get_table_" * string(uuid4()) * ".bin")
+            open(file, "w") do io
+                for v in vals
+                    write(io, v)
+                end
+            end
+            push!(columns, Dict("name" => cname, "type" => "numeric", "file" => file, "na" => "NaN"))
+        else
+            vals = Any[]
+            for i in 1:rows
+                push!(vals, ismissing(col[i]) ? nothing : coerce_for_json(col[i]))
+            end
+            push!(columns, Dict("name" => cname, "type" => "character", "values" => vals))
+        end
+    end
+
+    elapsed = (time() - t0) * 1000.0
+    _set_last_transfer("typed table", source, String(name), x, rows, cols, elapsed)
+    return Dict("__jexcel_transfer_type" => "table", "rows" => rows, "cols" => cols, "include_headers" => true, "columns" => columns, "class" => string(typeof(x)))
+end
+
+function set_table_from_payload(name::AbstractString, rows::Integer, cols::Integer, columns)
+    t0 = time()
+    DF = _try_import_dataframes()
+    pairs = Pair{Symbol, Any}[]
+    for col in columns
+        cname = String(get(col, "name", "V" * string(length(pairs) + 1)))
+        typ = String(get(col, "type", "character"))
+        if typ == "numeric"
+            file = String(get(col, "file", ""))
+            vals = Vector{Float64}(undef, Int(rows))
+            open(file, "r") do io
+                read!(io, vals)
+            end
+            push!(pairs, Symbol(cname) => vals)
+        else
+            vals = get(col, "values", Any[])
+            push!(pairs, Symbol(cname) => Any[v === nothing ? missing : v for v in vals])
+        end
+    end
+    df = DF.DataFrame(pairs...)
+    OBJECT_STORE[String(name)] = df
+    Core.eval(Main, :($(Symbol(name)) = OBJECT_STORE[$(String(name))]))
+    elapsed = (time() - t0) * 1000.0
+    _set_last_transfer("typed table to Julia", "JSetTable", String(name), df, rows, cols, elapsed)
+    return true
+end
+
+function coerce_for_transport(x; source="general", name="")
+    if is_numeric_exportable(x)
+        return export_numeric_object(x; source=source, name=name)
+    elseif is_dataframe_like(x)
+        return export_table_object(x; source=source, name=name)
+    else
+        return coerce_for_json(x)
+    end
+end
+
+function _contains_assignment_expr(ex)
+    if ex isa Expr
+        if ex.head == :(=) || ex.head == :(:=) || ex.head == :(.=)
+            return true
+        end
+        return any(_contains_assignment_expr, ex.args)
+    end
+    return false
+end
+
+function _assigned_symbols!(out::Vector{Symbol}, ex)
+    if ex isa Expr
+        if ex.head == :(=) && length(ex.args) >= 2
+            lhs = ex.args[1]
+            if lhs isa Symbol
+                push!(out, lhs)
+            end
+        end
+        for a in ex.args
+            _assigned_symbols!(out, a)
+        end
+    end
+    return out
+end
+
+function _simple_global_assignment_name(code::AbstractString)
+    # Common Excel workflow: JEval("x = randn(10000,20)").
+    # Force this case to top-level global assignment so the object is visible
+    # to later JGetNumeric/JCall calls in the persistent worker.
+    m = match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)", code)
+    return m === nothing ? nothing : String(m.captures[1])
+end
+
 function eval_code_for_excel(code)
+    simple_name = _simple_global_assignment_name(code)
+
+    if simple_name !== nothing
+        # Fast, reliable path for the common Excel workflow:
+        #   JEval("x = randn(10000,20)")
+        # Julia assignment inside helper functions can be tricky, so evaluate
+        # the right-hand side in Main, then explicitly store the result in
+        # OBJECT_STORE. Later JGetNumeric/JCall look in OBJECT_STORE first.
+        m = match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)(.*)$"s, code)
+        rhs = m === nothing ? nothing : String(m.captures[2])
+        if rhs === nothing || isempty(strip(rhs))
+            error("Could not parse assignment right-hand side.")
+        end
+        value = Core.eval(Main, Meta.parse(rhs))
+        OBJECT_STORE[simple_name] = value
+        try
+            Core.eval(Main, :($(Symbol(simple_name)) = OBJECT_STORE[$(String(simple_name))]))
+        catch
+            # OBJECT_STORE is the authoritative store for bridge objects.
+        end
+        return "OK"
+    end
+
     expr = Meta.parse("begin\n" * code * "\nend")
+    has_assignment = _contains_assignment_expr(expr)
+    assigned = Symbol[]
+    _assigned_symbols!(assigned, expr)
     value = Core.eval(Main, expr)
-    return coerce_for_json(value)
+
+    # In Julia, assignment returns the assigned value. For Excel bridge usage,
+    # treat assignment/effect code like R/Python: create/update the object and
+    # return a compact status instead of spilling a large result accidentally.
+    if has_assignment
+        for sym in assigned
+            if isdefined(Main, sym)
+                OBJECT_STORE[String(sym)] = getfield(Main, sym)
+            end
+        end
+        return "OK"
+    end
+
+    return coerce_for_transport(value; source="JEval", name="")
 end
 
 function handle_request(req::AbstractDict)
@@ -275,7 +590,7 @@ function handle_request(req::AbstractDict)
             f = resolve_function(fun_name)
             args = normalize_call_args(get(req, "args", Any[]))
             value = f(args...)
-            return make_ok(id, coerce_for_json(value))
+            return make_ok(id, coerce_for_transport(value; source="JCall", name=fun_name))
 
         elseif cmd == "set"
             name = get(req, "name", nothing)
@@ -290,13 +605,43 @@ function handle_request(req::AbstractDict)
             name isa AbstractString || error("name is missing.")
 
             if haskey(OBJECT_STORE, name)
-                return make_ok(id, coerce_for_json(OBJECT_STORE[name]))
+                return make_ok(id, coerce_for_transport(OBJECT_STORE[name]; source="JGet", name=name))
             elseif isdefined(Main, Symbol(name))
                 value = getfield(Main, Symbol(name))
-                return make_ok(id, coerce_for_json(value))
+                return make_ok(id, coerce_for_transport(value; source="JGet", name=name))
             else
                 error("Object '" * name * "' was not found.")
             end
+
+        elseif cmd == "set_numeric"
+            name = get(req, "name", nothing)
+            file = get(req, "file", nothing)
+            rows = Int(get(req, "rows", 0))
+            cols = Int(get(req, "cols", 0))
+            name isa AbstractString || error("name is missing.")
+            file isa AbstractString || error("file is missing.")
+            return make_ok(id, set_numeric_from_file(name, file, rows, cols))
+
+        elseif cmd == "get_numeric"
+            name = get(req, "name", nothing)
+            name isa AbstractString || error("name is missing.")
+            return make_ok(id, export_numeric_object(_resolve_named_object(name); source="JGetNumeric", name=name))
+
+        elseif cmd == "set_table"
+            name = get(req, "name", nothing)
+            rows = Int(get(req, "rows", 0))
+            cols = Int(get(req, "cols", 0))
+            columns = get(req, "columns", Any[])
+            name isa AbstractString || error("name is missing.")
+            return make_ok(id, set_table_from_payload(name, rows, cols, columns))
+
+        elseif cmd == "get_table"
+            name = get(req, "name", nothing)
+            name isa AbstractString || error("name is missing.")
+            return make_ok(id, export_table_object(_resolve_named_object(name); source="JGetTable", name=name))
+
+        elseif cmd == "last_transfer"
+            return make_ok(id, last_transfer_table())
 
         elseif cmd == "exists"
             name = get(req, "name", nothing)

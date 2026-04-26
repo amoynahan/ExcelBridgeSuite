@@ -46,6 +46,20 @@ public static class JFunctions
         }
     }
 
+    [ExcelFunction(
+        Name = "JObj",
+        Description = "Pass a Julia object reference into JCall. Example: JCall(\"size\", JObj(\"x\")).",
+        Category = "JuliaExcelBridge")]
+    public static object JObj(
+        [ExcelArgument(Name = "name", Description = "Name of the Julia object to reference.")] string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "Error: object name is blank.";
+
+        return JBridge.MakeObjectReference(name);
+    }
+
+
     private static int ToIntOrDefault(object value, int defaultValue)
     {
         if (value is ExcelMissing || value is ExcelEmpty || value == null)
@@ -191,6 +205,37 @@ public static class JFunctions
         }
     }
 
+
+    [ExcelFunction(
+        Name = "JSetTable",
+        Description = "Assign an Excel table/range to a Julia DataFrame using the typed table transfer path.",
+        Category = "JuliaExcelBridge")]
+    public static object JSetTable(
+        [ExcelArgument(Name = "name", Description = "Name of the DataFrame to create.")] string name,
+        [ExcelArgument(Name = "value", Description = "Excel range to assign as a DataFrame.")] object value,
+        [ExcelArgument(Name = "hasHeaders", Description = "TRUE if the first row contains column names. Default TRUE.")] object hasHeaders)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            bool headers = true;
+            if (hasHeaders is bool b)
+                headers = b;
+            else if (hasHeaders is double d)
+                headers = d != 0.0;
+            else if (hasHeaders is string st && !string.IsNullOrWhiteSpace(st))
+                headers = !(st.Equals("false", StringComparison.OrdinalIgnoreCase) || st.Equals("no", StringComparison.OrdinalIgnoreCase) || st.Equals("0", StringComparison.OrdinalIgnoreCase));
+
+            return JBridge.SetTable(name, value, headers);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
     [ExcelFunction(
         Name = "JGet",
         Description = "Return an object from the persistent Julia session to Excel.",
@@ -204,6 +249,63 @@ public static class JFunctions
                 return "Error: object name is blank.";
 
             return JBridge.Get(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+
+    [ExcelFunction(
+        Name = "JGetNumeric",
+        Description = "Return a numeric Julia array/vector through the fast binary double path.",
+        Category = "JuliaExcelBridge")]
+    public static object JGetNumeric(
+        [ExcelArgument(Name = "name", Description = "Name of the numeric Julia object.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return JBridge.GetNumeric(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [ExcelFunction(
+        Name = "JGetTable",
+        Description = "Return a Julia DataFrame through the typed table path.",
+        Category = "JuliaExcelBridge")]
+    public static object JGetTable(
+        [ExcelArgument(Name = "name", Description = "Name of the DataFrame.")] string name)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Error: object name is blank.";
+
+            return JBridge.GetTable(name);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    [ExcelFunction(
+        Name = "JLastTransfer",
+        Description = "Show the last Julia transfer method, object type, dimensions, and elapsed export time.",
+        Category = "JuliaExcelBridge")]
+    public static object JLastTransfer()
+    {
+        try
+        {
+            return JBridge.LastTransfer();
         }
         catch (Exception ex)
         {

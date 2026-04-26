@@ -8,6 +8,33 @@ suppressPackageStartupMessages(library(jsonlite))
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 .object_store <- new.env(parent = emptyenv())
+.last_transfer_info <- data.frame(
+  Field = c("Method", "Source", "Name", "Class", "Type", "Dimensions", "Rows", "Columns", "ElapsedSeconds"),
+  Value = c("none", "", "", "", "", "", "", "", ""),
+  stringsAsFactors = FALSE
+)
+
+set_last_transfer_info <- function(method, source = "", name = "", object = NULL, rows = NA_integer_, cols = NA_integer_, elapsed = NA_real_) {
+  cls <- if (is.null(object)) "" else paste(class(object), collapse = ", ")
+  typ <- if (is.null(object)) "" else typeof(object)
+  dims <- if (is.null(object)) "" else format_dim(object)
+
+  assign(".last_transfer_info", data.frame(
+    Field = c("Method", "Source", "Name", "Class", "Type", "Dimensions", "Rows", "Columns", "ElapsedSeconds"),
+    Value = c(
+      as.character(method),
+      as.character(source),
+      as.character(name),
+      cls,
+      typ,
+      dims,
+      ifelse(is.na(rows), "", as.character(rows)),
+      ifelse(is.na(cols), "", as.character(cols)),
+      ifelse(is.na(elapsed), "", sprintf("%.6f", elapsed))
+    ),
+    stringsAsFactors = FALSE
+  ), envir = .GlobalEnv)
+}
 
 if (!is.null(startup_file) && file.exists(startup_file)) {
   source(startup_file, local = .GlobalEnv)
@@ -141,6 +168,18 @@ convert_json_value <- function(x) {
 }
 
 convert_call_arg <- function(x) {
+  if (is.list(x) && !is.null(x$`__rexcel_arg_type`) && identical(as.character(x$`__rexcel_arg_type`), "robj")) {
+    nm <- as.character(x$name %||% "")
+    if (!nzchar(nm)) stop("RObj argument had a blank object name.")
+    if (exists(nm, envir = .GlobalEnv, inherits = FALSE)) {
+      return(get(nm, envir = .GlobalEnv, inherits = FALSE))
+    }
+    if (exists(nm, envir = .object_store, inherits = FALSE)) {
+      return(get(nm, envir = .object_store, inherits = FALSE))
+    }
+    stop(sprintf("Object '%s' was not found.", nm))
+  }
+
   convert_json_value(x)
 }
 
@@ -212,6 +251,182 @@ assignment_target_name <- function(expr) {
 
 
 
+# --- Fast transfer helpers -------------------------------------------------
+make_transfer_file <- function(prefix, ext) {
+  dir <- file.path(tempdir(), "RExcelBridgeTransfer")
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  file.path(dir, paste0(prefix, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), "_", sample.int(1e9, 1), ext))
+}
+
+is_fast_numeric <- function(x) {
+  is.atomic(x) && is.numeric(x) && !is.null(x) && !is.complex(x)
+}
+
+export_numeric_for_excel <- function(x) {
+  if (!is_fast_numeric(x)) stop("Object is not a numeric vector, matrix, or array.")
+  d <- dim(x)
+  if (is.null(d)) {
+    rows <- length(x); cols <- 1L
+  } else if (length(d) == 2) {
+    rows <- as.integer(d[1]); cols <- as.integer(d[2])
+  } else {
+    stop("Numeric arrays with more than two dimensions are not yet supported for direct Excel return.")
+  }
+  file <- make_transfer_file("numeric", ".bin")
+  con <- file(file, open = "wb")
+  on.exit(close(con), add = TRUE)
+  writeBin(as.double(x), con, size = 8L, endian = "little")
+  list(`__rexcel_transfer_type` = "numeric", file = normalizePath(file, winslash = "/", mustWork = FALSE),
+       rows = rows, cols = cols, storage_order = "column-major-double64", na = "NaN")
+}
+
+normalize_table_column <- function(col) {
+  if (is.factor(col)) return(as.character(col))
+  if (inherits(col, "Date")) return(format(col, "%Y-%m-%d"))
+  if (inherits(col, "POSIXt")) return(format(col, "%Y-%m-%d %H:%M:%S"))
+  col
+}
+
+export_table_for_excel <- function(x, include_headers = TRUE) {
+  if (!is.data.frame(x)) stop("Object is not a data.frame or tibble.")
+  x <- as.data.frame(x, stringsAsFactors = FALSE)
+  bad_cols <- vapply(x, function(col) is.list(col) && !is.atomic(col), logical(1))
+  if (any(bad_cols)) stop("Data frames with list-columns are not supported for direct Excel return.")
+  x[] <- lapply(x, normalize_table_column)
+  rows <- nrow(x); cols <- ncol(x)
+  col_info <- vector("list", cols)
+  for (j in seq_len(cols)) {
+    col <- x[[j]]; nm <- names(x)[j]
+    if (is.numeric(col)) {
+      file <- make_transfer_file(paste0("col_", j), ".bin")
+      con <- file(file, open = "wb"); writeBin(as.double(col), con, size = 8L, endian = "little"); close(con)
+      col_info[[j]] <- list(name = nm, type = "numeric", file = normalizePath(file, winslash = "/", mustWork = FALSE))
+    } else if (is.logical(col)) {
+      vals <- lapply(col, function(v) if (is.na(v)) NULL else isTRUE(v))
+      col_info[[j]] <- list(name = nm, type = "logical", values = vals)
+    } else {
+      vals <- lapply(as.character(col), function(v) if (is.na(v)) NULL else v)
+      col_info[[j]] <- list(name = nm, type = "character", values = vals)
+    }
+  }
+  list(`__rexcel_transfer_type` = "table", rows = rows, cols = cols, include_headers = isTRUE(include_headers), columns = col_info)
+}
+
+coerce_for_transport <- function(x, source = "", name = "") {
+  started <- proc.time()[["elapsed"]]
+
+  if (is_fast_numeric(x)) {
+    result <- export_numeric_for_excel(x)
+    elapsed <- proc.time()[["elapsed"]] - started
+    set_last_transfer_info("fast numeric binary", source, name, x, result$rows, result$cols, elapsed)
+    return(result)
+  }
+
+  if (is.data.frame(x)) {
+    result <- export_table_for_excel(x, include_headers = TRUE)
+    elapsed <- proc.time()[["elapsed"]] - started
+    set_last_transfer_info("typed table", source, name, x, result$rows, result$cols, elapsed)
+    return(result)
+  }
+
+  result <- coerce_for_json(x)
+  elapsed <- proc.time()[["elapsed"]] - started
+  set_last_transfer_info("json/general", source, name, x, NA_integer_, NA_integer_, elapsed)
+  result
+}
+
+
+
+import_numeric_from_excel <- function(file, rows, cols, name) {
+  started <- proc.time()[["elapsed"]]
+
+  rows <- as.integer(rows)
+  cols <- as.integer(cols)
+
+  if (is.na(rows) || is.na(cols) || rows <= 0L || cols <= 0L) {
+    stop("Invalid numeric transfer dimensions.")
+  }
+
+  if (is.null(file) || !nzchar(file) || !file.exists(file)) {
+    stop("Numeric transfer file was not found.")
+  }
+
+  con <- file(file, open = "rb")
+  on.exit(close(con), add = TRUE)
+
+  vec <- readBin(con, what = "double", n = rows * cols, size = 8L, endian = "little")
+  if (length(vec) != rows * cols) {
+    stop(sprintf("Numeric transfer file had %s values; expected %s.", length(vec), rows * cols))
+  }
+
+  # C# writes Excel ranges in row-major order. Use byrow=TRUE to preserve worksheet layout.
+  value <- matrix(vec, nrow = rows, ncol = cols, byrow = TRUE)
+
+  if (rows == 1L && cols == 1L) {
+    value <- value[1, 1]
+  }
+
+  assign(name, value, envir = .GlobalEnv)
+
+  elapsed <- proc.time()[["elapsed"]] - started
+  set_last_transfer_info("fast numeric binary", "RSet", name, value, rows, cols, elapsed)
+  TRUE
+}
+
+
+import_table_from_excel <- function(req) {
+  started <- proc.time()[["elapsed"]]
+  rows <- as.integer(req$rows %||% 0L)
+  cols <- as.integer(req$cols %||% 0L)
+  columns <- req$columns %||% list()
+
+  if (is.na(rows) || is.na(cols) || rows < 0L || cols <= 0L) {
+    stop("Invalid table transfer dimensions.")
+  }
+  if (length(columns) != cols) {
+    stop(sprintf("Table transfer expected %s columns but received %s.", cols, length(columns)))
+  }
+
+  out <- vector("list", cols)
+  nms <- character(cols)
+
+  for (j in seq_len(cols)) {
+    col <- columns[[j]]
+    nms[j] <- as.character(col$name %||% paste0("V", j))
+    type <- as.character(col$type %||% "character")
+
+    if (identical(type, "numeric")) {
+      file <- col$file
+      if (is.null(file) || !nzchar(file) || !file.exists(file)) {
+        stop(sprintf("Numeric table-column transfer file was not found for column %s.", j))
+      }
+      con <- file(file, open = "rb")
+      vals <- readBin(con, what = "double", n = rows, size = 8L, endian = "little")
+      close(con)
+      if (length(vals) != rows) {
+        stop(sprintf("Numeric table-column file had %s values; expected %s.", length(vals), rows))
+      }
+      vals[is.nan(vals)] <- NA_real_
+      out[[j]] <- vals
+    } else if (identical(type, "logical")) {
+      vals <- col$values %||% vector("list", rows)
+      out[[j]] <- vapply(vals, function(v) if (is.null(v)) NA else isTRUE(v), logical(1))
+    } else {
+      vals <- col$values %||% vector("list", rows)
+      out[[j]] <- vapply(vals, function(v) if (is.null(v)) NA_character_ else as.character(v), character(1))
+    }
+  }
+
+  names(out) <- make.names(nms, unique = TRUE)
+  names(out) <- nms
+  value <- as.data.frame(out, check.names = FALSE, stringsAsFactors = FALSE)
+  assign(req$name, value, envir = .GlobalEnv)
+
+  elapsed <- proc.time()[["elapsed"]] - started
+  set_last_transfer_info("typed table", "RSetTable", req$name, value, rows, cols, elapsed)
+  TRUE
+}
+
 render_plot_to_file <- function(code, file, width = 800, height = 600, res = 96) {
   if (is.null(file) || !nzchar(file)) {
     stop("Plot file path is blank.")
@@ -250,7 +465,7 @@ eval_code_for_excel <- function(code) {
     return(sprintf("Assigned: %s", assigned_name))
   }
 
-  coerce_for_json(last_value)
+  coerce_for_transport(last_value, source = "REval", name = "")
 }
 
 handle_request <- function(req) {
@@ -300,7 +515,27 @@ handle_request <- function(req) {
         return(list(handle = handle, class = class(value)[1]))
       }
 
-      coerce_for_json(value)
+      assign(".__rexcel_last_call_value", value, envir = .object_store)
+      coerce_for_transport(value, source = "RCall", name = req$fun)
+    })
+    return(c(list(id = req$id), out))
+  }
+
+  if (identical(cmd, "set_table")) {
+    out <- safe_eval(function() {
+      import_table_from_excel(req)
+    })
+    return(c(list(id = req$id), out))
+  }
+
+  if (identical(cmd, "set_numeric")) {
+    out <- safe_eval(function() {
+      import_numeric_from_excel(
+        file = req$file,
+        rows = req$rows,
+        cols = req$cols,
+        name = req$name
+      )
     })
     return(c(list(id = req$id), out))
   }
@@ -309,6 +544,7 @@ handle_request <- function(req) {
     out <- safe_eval(function() {
       value <- convert_assignment_value(req$value)
       assign(req$name, value, envir = .GlobalEnv)
+      set_last_transfer_info("json/general", "RSet", req$name, value, NA_integer_, NA_integer_, NA_real_)
       TRUE
     })
     return(c(list(id = req$id), out))
@@ -320,7 +556,38 @@ handle_request <- function(req) {
         stop(sprintf("Object '%s' was not found.", req$name))
       }
       value <- get(req$name, envir = .GlobalEnv, inherits = FALSE)
-      coerce_for_json(value)
+      result <- coerce_for_json(value)
+      set_last_transfer_info("json/general", "RGet", req$name, value, NA_integer_, NA_integer_, NA_real_)
+      result
+    })
+    return(c(list(id = req$id), out))
+  }
+
+  if (identical(cmd, "get_numeric")) {
+    out <- safe_eval(function() {
+      if (!exists(req$name, envir = .GlobalEnv, inherits = FALSE)) {
+        stop(sprintf("Object '%s' was not found.", req$name))
+      }
+      value <- get(req$name, envir = .GlobalEnv, inherits = FALSE)
+      coerce_for_transport(value, source = "RGetNumeric", name = req$name)
+    })
+    return(c(list(id = req$id), out))
+  }
+
+  if (identical(cmd, "get_table")) {
+    out <- safe_eval(function() {
+      if (!exists(req$name, envir = .GlobalEnv, inherits = FALSE)) {
+        stop(sprintf("Object '%s' was not found.", req$name))
+      }
+      value <- get(req$name, envir = .GlobalEnv, inherits = FALSE)
+      coerce_for_transport(value, source = "RGetTable", name = req$name)
+    })
+    return(c(list(id = req$id), out))
+  }
+
+  if (identical(cmd, "last_transfer")) {
+    out <- safe_eval(function() {
+      coerce_for_json(get(".last_transfer_info", envir = .GlobalEnv, inherits = FALSE))
     })
     return(c(list(id = req$id), out))
   }
