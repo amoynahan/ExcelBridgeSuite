@@ -106,9 +106,59 @@ add_ten <- function(x) {
 
 ## Numerical Example — Cholesky
 
-=RCall("CholDecomp", A1:B2)
+## 7. Cholesky Decomposition (Advanced Example)
 
-![Chol](docs/images/CholDecomp.jpg)
+This demonstrates real numerical computation.
+
+### R Wrapper
+
+Add the wrapper to `RFunctions.R`:
+
+chol_decomp <- function(x, tol = 1e-8) {  
+  x <- as.matrix(x)  
+  
+  if (!is.numeric(x)) {  
+    stop("Input must be numeric.")  
+  }  
+  
+  if (nrow(x) != ncol(x)) {  
+    stop("Input matrix must be square.")  
+  }  
+  
+  if (max(abs(x - t(x))) > tol) {  
+    stop("Input matrix must be symmetric.")  
+  }  
+  
+  chol(x)  
+}
+
+### Excel Example
+
+### Requirements
+- Matrix must be square
+- Matrix must be symmetric
+- Matrix must be positive definite
+
+Put this matrix in Excel:
+
+```
+4   2
+2   3
+```
+
+Then run:
+
+```excel
+=RCall("CholDecomp", A1:B2)
+```
+
+Expected result:
+
+```
+2        1
+0   1.414214
+```
+![Description of image](docs/images/CholDecomp.jpg)
 
 ---
 
