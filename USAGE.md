@@ -106,7 +106,7 @@ add_ten <- function(x) {
 
 ## Numerical Example — Cholesky
 
-## 7. Cholesky Decomposition (Advanced Example)
+## Cholesky Decomposition (Advanced Example)
 
 This demonstrates real numerical computation.
 
