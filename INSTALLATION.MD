@@ -57,28 +57,25 @@ RExcelBridge\bin\Release\net8.0-windows\publish
 
 This folder contains everything needed to run the add-in.
 
-Typical contents:
+![Description of image](docs/images/publishdirectory.jpg)
 
-- `<BridgeName>64.xll`  
+After building or downloading the release, the `publish` folder will contain the files required to run the add-in.
+
+## Publish Directory Contents
+
+A typical publish directory contains the following files:
+
+- `RExcelBridge64-packed.xll`  
   The Excel add-in. This is the file you load into Excel.
 
-- `<BridgeName>.dll`  
-  The compiled .NET assembly containing the bridge logic.
+- `worker.R`, `startup.R`  
+  R scripts used internally by the bridge to execute and manage R sessions.
 
-- `<BridgeName>.dna`  
-  Excel-DNA configuration file that tells Excel how to load the add-in.
-
-- `*.deps.json`, `*.runtimeconfig.json`  
-  .NET runtime configuration and dependency files.
-
-- `ExcelDna.Integration.dll` (and related files)  
-  Excel-DNA runtime components required by the add-in.
-
-- `worker.R`, `startup.R` (R bridge only)  
-  Scripts used to execute R code.
+- `RFunctions.R`  
+  Optional helper functions that can be sourced into the R session.
 
 - `rscript-path.txt`  
-  Path configuration file for locating `Rscript.exe`.
+  Configuration file used to specify the path to `Rscript.exe`.
 
 - `plot-path.txt`  
   Optional configuration file for controlling where plots are saved.
