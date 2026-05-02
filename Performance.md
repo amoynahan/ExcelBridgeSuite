@@ -1,182 +1,373 @@
 # RExcelBridge Performance Guide
 
-This document describes performance considerations and optimized workflows for RExcelBridge.
+This document explains how to use RExcelBridge efficiently when moving data between Excel and R.
 
-RExcelBridge is designed around a persistent R worker and JSON-based data exchange. Understanding how data moves between Excel and R is key to achieving good performance.
-
----
-
-## Architecture Overview
-
-RExcelBridge uses:
-
-- A persistent R session (worker.R)
-- JSON serialization for data transfer
-- An internal object store in R for reused objects
-
-Key implications:
-
-- Data transfer is the main cost
-- Computation inside R is fast once data is present
-- Objects can persist across calls
+RExcelBridge supports simple general-purpose transfer functions, but it also includes more targeted transfer functions for tables and numeric data. For larger datasets, these targeted functions should usually be preferred.
 
 ---
 
-## Key Performance Principles
+## Overview
 
-### 1. Minimize Data Movement
+The main performance cost in RExcelBridge is moving data between Excel and R.
 
-The slowest step is moving data between Excel and R.
+Once data is inside the persistent R session, R computations are usually fast. The best performance strategy is therefore:
 
-Avoid:
-- Repeated large range transfers
-- Recomputing the same dataset
-
-Prefer:
-- Transfer once
-- Reuse in R
+1. Move data into R efficiently
+2. Keep it in the persistent R session
+3. Run computations inside R
+4. Return only the results needed in Excel
 
 ---
 
-### 2. Use Persistent Objects
+## Recommended Transfer Functions
 
-RExcelBridge stores objects in a persistent session.
+For performance-sensitive work, focus on these functions:
+
+| Function | Direction | Best Use |
+|---|---|---|
+| `RSetTable(name, range, hasHeaders)` | Excel to R | Send rectangular Excel data into R as a table/data frame |
+| `RGetTable(name)` | R to Excel | Return an R data frame/table to Excel |
+| `RGetNumeric(name)` | R to Excel | Return a numeric vector or matrix using the numeric fast path |
+
+These functions make the data-transfer intent explicit and help avoid unnecessary overhead.
+
+---
+
+## General-Purpose vs Performance-Oriented Transfer
+
+RExcelBridge also provides general-purpose functions:
+
+| Function | Direction | Use |
+|---|---|---|
+| `RSet(name, value)` | Excel to R | General assignment of Excel values/ranges to R |
+| `RGet(name)` | R to Excel | General retrieval of R objects |
+| `RCall(fun, ...)` | Excel to R and back | Call an R function with Excel arguments |
+| `REval(code)` | R execution | Execute R code and optionally return a result |
+
+These are convenient and useful for small examples.
+
+For larger data, prefer the more explicit table and numeric functions where appropriate.
+
+---
+
+## RSetTable: Send Excel Tables to R
+
+Use `RSetTable` when sending rectangular Excel data into R.
+
+This is the preferred approach for worksheet data that should become an R data frame.
 
 Example:
 
-=RSet("x", A1:A100000)
-=REval("mean(x)")
+```excel
+=RSetTable("df", A1:D100000, TRUE)
+```
 
-Avoid:
+The third argument indicates whether the first row contains headers.
 
-=RCall("mean", A1:A100000)
+Use `TRUE` when the first row contains column names:
+
+```excel
+=RSetTable("df", A1:D100000, TRUE)
+```
+
+Use `FALSE` when the range contains data only:
+
+```excel
+=RSetTable("df", A1:D99999, FALSE)
+```
+
+After the table is loaded, work with it inside R:
+
+```excel
+=REval("summary(df)")
+```
+
+or:
+
+```excel
+=REval("result <- aggregate(df$VALUE, list(df$GROUP), mean)")
+```
 
 ---
 
-### 3. Separate Transfer and Compute
+## RGetTable: Return Data Frames to Excel
+
+Use `RGetTable` when returning a data frame or rectangular table from R to Excel.
+
+Example:
+
+```excel
+=RGetTable("result")
+```
+
+This is preferred when the R object is a data frame or table-like object.
 
 Recommended pattern:
 
-=RSet("x", A1:D100000)
-=REval("result <- some_function(x)")
-=RGet("result")
+```excel
+=REval("result <- head(df, 20)")
+=RGetTable("result")
+```
+
+This keeps the larger object in R and only returns the table you need.
 
 ---
 
-## Data Transfer Behavior
+## RGetNumeric: Fast Numeric Return
 
-RExcelBridge converts data using JSON.
+Use `RGetNumeric` when returning numeric vectors or matrices from R to Excel.
 
-Important characteristics:
+Example:
 
-- Data frames are converted to row-wise lists
-- Matrices are transferred as row arrays
-- Scalars are returned directly
-- Large objects increase serialization cost
+```excel
+=REval("m <- matrix(rnorm(100000), ncol=10)")
+=RGetNumeric("m")
+```
 
----
+This is the preferred return path for large numeric matrices.
 
-## Internal Object Store
+Use it for:
 
-The worker maintains an internal object store.
+- Numeric matrices
+- Numeric vectors
+- Simulation output
+- Model matrices
+- Numeric result arrays
 
-Benefits:
+Avoid using it for:
 
-- Objects persist across calls
-- Reuse avoids repeated transfers
-- Enables multi-step workflows
+- Mixed-type data frames
+- Character columns
+- Tables with headers
+- Complex nested objects
 
-Use:
-
-=RRemove("x")
-
-to clean up memory.
-
----
-
-## Transfer Diagnostics
-
-RExcelBridge tracks the last transfer using:
-
-.last_transfer_info
-
-This includes:
-
-- Method (RSet, RGet, etc.)
-- Object name
-- Type and class
-- Dimensions
-- Rows and columns
-- Elapsed time
-
-This can be used for performance debugging.
+For mixed or table-like data, use `RGetTable`.
 
 ---
 
-## Large Data Recommendations
+## Recommended Large-Data Workflow
 
-Use optimized patterns when:
+### Step 1 — Load data once
 
-- Data > 10,000 rows
-- Repeated calculations
-- Multi-step workflows
+```excel
+=RSetTable("df", A1:D100000, TRUE)
+```
 
-Best practice:
+### Step 2 — Compute inside R
 
-1. Load once with RSet
-2. Transform inside R
-3. Return only final results
+```excel
+=REval("result <- subset(df, GROUP == 'A')")
+```
+
+### Step 3 — Return only the needed result
+
+```excel
+=RGetTable("result")
+```
+
+For numeric outputs:
+
+```excel
+=REval("m <- as.matrix(df[, c('X1','X2','X3')])")
+=RGetNumeric("m")
+```
 
 ---
 
-## Recalculation Strategy
+## Avoid Repeated Large RCall Transfers
 
-Excel recalculation can trigger expensive operations.
+This pattern is convenient but can be inefficient for large ranges:
 
-Recommendations:
+```excel
+=RCall("some_function", A1:D100000)
+```
 
-- Avoid volatile dependencies
-- Use helper cells
-- Trigger recalculation manually (F9) for large jobs
+The range may be transferred again each time Excel recalculates.
+
+Prefer:
+
+```excel
+=RSetTable("df", A1:D100000, TRUE)
+=REval("result <- some_function(df)")
+=RGetTable("result")
+```
+
+This separates data transfer from computation.
 
 ---
 
-## Plot Performance
+## Choosing the Right Function
 
-### Simple plotting
+### Use RSetTable when:
 
-Use RPlot for one-time rendering.
+- The input is a rectangular Excel range
+- The data should become an R data frame
+- The first row may contain column names
+- The dataset has mixed column types
 
-### Dynamic plotting
+### Use RGetTable when:
 
-Use two-step approach:
+- The R object is a data frame
+- You want headers returned to Excel
+- The output includes mixed types
+- The result is table-like
 
-- RPlotDataNamed → generate plot
-- PlotLink → display image
+### Use RGetNumeric when:
 
-This prevents unnecessary recomputation.
+- The R object is numeric
+- The output is a vector or matrix
+- You want the fastest numeric return path
+- You do not need column headers
+
+### Use RSet / RGet when:
+
+- The object is small
+- You are testing
+- You want the simplest general-purpose behavior
+
+---
+
+## Persistent R Session
+
+RExcelBridge uses a persistent R worker.
+
+This means objects remain available after they are created.
+
+Example:
+
+```excel
+=RSetTable("df", A1:D100000, TRUE)
+=REval("nrow(df)")
+=REval("names(df)")
+=REval("summary(df)")
+```
+
+The data does not need to be resent for each command.
 
 ---
 
 ## Memory Management
 
-Objects persist in R until removed.
+Because objects persist in R, large objects remain in memory until removed.
 
-Recommendations:
+Use:
 
-- Remove unused objects
-- Avoid duplicating large objects
-- Reuse existing data where possible
+```excel
+=RRemove("df")
+```
+
+to remove objects that are no longer needed.
+
+You can inspect the session with:
+
+```excel
+=RObjects()
+```
+
+and describe an object with:
+
+```excel
+=RDescribe("df")
+```
 
 ---
 
-## When Performance Matters
+## Data Frame Support
 
-Use these strategies when:
+RExcelBridge supports standard rectangular data frames.
 
-- Working with large datasets
-- Repeatedly recalculating
-- Experiencing slow response times
+Supported:
+
+- Numeric columns
+- Character columns
+- Logical columns
+- Standard rectangular tables
+
+Avoid:
+
+- List columns
+- Nested data frames
+- Highly complex R objects
+
+For best results, keep data frames rectangular and Excel-like.
+
+---
+
+## Numeric Fast Path
+
+`RGetNumeric` is intended for numeric-only output.
+
+This is useful because numeric matrices can be returned more efficiently than mixed-type tables.
+
+Good candidates:
+
+```r
+matrix(rnorm(100000), ncol = 10)
+as.matrix(df[, numeric_columns])
+predict(model, newdata)
+```
+
+If the output is mixed type or requires headers, use `RGetTable`.
+
+---
+
+## Plot Performance
+
+Plotting should follow the same principle: avoid unnecessary transfers.
+
+### Simple plots
+
+Use `RPlot` when creating a one-time plot.
+
+### Dynamic plots
+
+Use the two-cell pattern:
+
+1. `RPlotDataNamed` creates the plot and returns the PNG path
+2. `PlotLink` displays the image in Excel
+
+This separates plot generation from image display and improves reliability during recalculation.
+
+---
+
+## Recalculation Strategy
+
+Excel may recalculate formulas more often than expected.
+
+For large workflows:
+
+- Load large data once
+- Use `REval` to compute inside R
+- Return only small or final results
+- Consider manual recalculation with `F9`
+- Avoid volatile formulas connected to large transfers
+
+---
+
+## Suggested Performance Pattern
+
+For table workflows:
+
+```excel
+=RSetTable("df", A1:D100000, TRUE)
+=REval("result <- transform(df, NEW_VALUE = VALUE * 2)")
+=RGetTable("result")
+```
+
+For numeric workflows:
+
+```excel
+=REval("m <- matrix(rnorm(100000), ncol=10)")
+=RGetNumeric("m")
+```
+
+For cleanup:
+
+```excel
+=RRemove("df")
+=RRemove("result")
+=RRemove("m")
+```
 
 ---
 
@@ -184,19 +375,23 @@ Use these strategies when:
 
 For best performance:
 
-- Minimize data transfers
-- Use persistent R objects
-- Separate data transfer from computation
-- Avoid repeated large RCall operations
-- Use dynamic plotting patterns carefully
+- Use `RSetTable` to send Excel tables into R
+- Use `RGetTable` to return data frames and mixed-type tables
+- Use `RGetNumeric` to return numeric vectors and matrices
+- Avoid repeated large `RCall` transfers
+- Keep large objects in the persistent R session
+- Return only the results needed in Excel
+- Remove large objects when finished
 
 ---
 
-## Next Steps
+## Suggested Benchmarks to Add Later
 
-You can extend this document with:
+You may want to add benchmark examples such as:
 
-- Benchmarks (small vs large data)
-- Timing comparisons
-- Screenshots of workflows
+- `RGet` vs `RGetNumeric` for numeric matrices
+- `RSet` vs `RSetTable` for rectangular data
+- Repeated `RCall` vs `RSetTable` + `REval`
+- 10,000 rows vs 100,000 rows vs 200,000 rows
 
+These benchmarks would make the performance benefits more concrete.
