@@ -63,7 +63,6 @@ Typical contents:
 
 All files must remain together in this folder.  
 Do not move or copy only the `.xll` file.
-
 ---
 
 ## rscript-path.txt (Required for RExcelBridge)
@@ -72,53 +71,71 @@ This file tells the add-in where to find `Rscript.exe`.
 
 ### Setup
 
-1. Open `rscript-path.txt` in a text editor  
-2. Enter the full path to your Rscript executable  
+## Load the Excel Add-in
 
-Example: C:\Program Files\R\R-4.3.2\bin\Rscript.exe
+1. Open Excel  
+2. Click **File**  
+3. Click **Options**  
+4. In the Excel Options window, click **Add-ins**  
+5. At the bottom, in the **Manage** dropdown, select **Excel Add-ins** and click **Go**  
+6. In the Add-ins window, click **Browse**  
+7. Navigate to your publish directory:  
+   `RExcelBridge/bin/Release/net8.0-windows/publish`  
+8. Select the file:  
+   `RExcelBridge64-packed.xll`  
+9. Click **OK**  
 
-
-3. Save the file  
-
-### Notes
-
-- The path must be a full absolute path  
-- Do not use just `Rscript`  
-- If the path is incorrect or missing, RExcelBridge will not run  
-- If you install a new version of R, update this file  
-
----
-
-## plot-path.txt (Optional)
-
-This file controls where plot images (PNG files) are written.
-
-### Setup
-
-1. Open `plot-path.txt`  
-2. Enter a folder path where you want plots saved  
-
-Example: bin\Release\net8.0-windows\publish
-
-
-Then follow the same steps above to attach the `.xll` file in Excel.
+The add-in should now be loaded and available in Excel.
 
 ---
 
-## Notes
+## Trust and Security Settings (Required for .xll Add-ins)
 
-- Always run the add-in from the publish folder  
-- Do not separate files from the `.xll`  
-- If Excel does not load the add-in:
-  - Uncheck it  
-  - Restart Excel  
-  - Reattach the add-in  
-- When updating:
-  - Replace all files in the publish folder  
+If Excel blocks the add-in or it does not load, follow one of the options below:
+
+### Option 1: Unblock the file (recommended)
+
+1. Close Excel  
+2. In File Explorer, go to your publish folder  
+3. Right-click `RExcelBridge64-packed.xll`  
+4. Click **Properties**  
+5. At the bottom, if you see a security message, check **Unblock**  
+6. Click **Apply**, then **OK**  
 
 ---
 
-## Next Step
+### Option 2: Add the folder as a trusted location
+
+1. Open Excel  
+2. Click **File**  
+3. Click **Options**  
+4. Go to **Trust Center**  
+5. Click **Trust Center Settings**  
+6. Click **Trusted Locations**  
+7. Click **Add new location**  
+8. Browse to your publish folder:  
+   `RExcelBridge/bin/Release/net8.0-windows/publish`  
+9. Click **OK**  
+
+---
+
+### Option 3: Enable add-ins if disabled
+
+1. Go to **File → Options → Add-ins**  
+2. In **Manage**, select **Disabled Items** → click **Go**  
+3. If the add-in appears, enable it  
+
+---
+
+After completing one of the above:
+
+- Restart Excel  
+- Re-load the add-in if needed (via **Browse**)  
+
+---
+
+**Note:**  
+For broader distribution, consider digitally signing the `.xll` so users do not need to adjust security settings.
 
 See the Usage section for:
 
