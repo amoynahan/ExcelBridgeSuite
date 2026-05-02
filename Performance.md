@@ -72,10 +72,6 @@ Use `TRUE` when the first row contains column names:
 
 Use `FALSE` when the range contains data only:
 
-```excel
-=RSetTable("df", A1:D99999, FALSE)
-```
-
 After the table is loaded, work with it inside R:
 
 ```excel
