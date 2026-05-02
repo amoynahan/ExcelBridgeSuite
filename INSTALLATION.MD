@@ -12,8 +12,30 @@ You can install any or all of them using one of the methods below.
 
 ## Installation Options
 
-- Option 1: Use precompiled add-ins (recommended)  
-- Option 2: Build from source using Visual Studio  
+### Option 1: Use Precompiled Add-ins (Recommended)
+
+Download the precompiled add-in and load it directly into Excel using the steps below.  
+This is the fastest way to get started.
+
+---
+
+### Option 2: Build from Source (Visual Studio)
+
+If you prefer, you can build the add-in yourself from source.
+
+The full project is available in this repository and can be opened in Visual Studio.  
+Visual Studio Community Edition is free and can be downloaded from Microsoft.
+
+Steps:
+1. Install Visual Studio (Community Edition is sufficient)  
+2. Clone or download this repository  
+3. Open the solution file in Visual Studio  
+4. Build the project (Release configuration)  
+5. Navigate to the publish folder:  
+   `RExcelBridge/bin/Release/net8.0-windows/publish`  
+6. Load the generated `.xll` file into Excel (see instructions above)  
+
+Building from source provides full visibility into the code and allows you to modify or extend the add-in if needed.
 
 ---
 
