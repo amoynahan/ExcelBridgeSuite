@@ -12,9 +12,96 @@ If you understand the RExcelBridge workflow first, the Julia and Python bridges 
 
 ## Quick Start
 
-Start here. This verifies everything is working.
-
 ### Step 1 — Check connectivity
 
-```excel
 =RPing()
+
+Expected:
+OK | R version ...
+
+### Step 2 — Evaluate a simple expression
+
+=REval("1+1")
+
+Expected:
+2
+
+### Step 3 — Return multiple values
+
+=REval("c(10,20,30)")
+
+---
+
+## Before You Start
+
+- Add-in is attached and checked  
+- rscript-path.txt points to Rscript.exe  
+- Files remain in publish folder  
+
+---
+
+## Core Workflow
+
+### Evaluate R code
+=REval("sqrt(16)")
+
+### Call an R function
+=RCall("sum",1,2,3)
+
+### Return structured data
+=REval("matrix(c(1,2,3,4), nrow=2)")
+
+### Pass data
+=RSet("x", A1:B3)
+=RGet("x")
+
+---
+
+## Custom Functions
+
+Place in RFunctions.R
+
+Example:
+
+add_ten <- function(x) {
+  x + 10
+}
+
+Excel:
+=REval("add_ten(5)")
+
+---
+
+## Plotting
+
+Simple:
+=RPlot("plot(1:5)", "BasicPlot", 800, 600)
+
+Dynamic:
+Use RPlotDataNamed + PlotLink (two-cell pattern)
+
+---
+
+## Performance
+
+See PERFORMANCE.md
+
+---
+
+## Troubleshooting
+
+Ping fails → reload add-in  
+R fails → check rscript-path.txt  
+Plots fail → check plot-path.txt  
+
+---
+
+## Function Reference
+
+RPing()
+REval(code)
+RCall(fun,...)
+RSet(name,value)
+RGet(name)
+RPlot(...)
+RSource(file)
