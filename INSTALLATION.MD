@@ -33,7 +33,7 @@ Steps:
 4. Build the project (Release configuration)  
 5. Navigate to the publish folder:  
    `RExcelBridge/bin/Release/net8.0-windows/publish`  
-6. Load the generated `.xll` file into Excel (see instructions above)  
+6. Load the generated `.xll` file into Excel (see instructions below)  
 
 Building from source provides full visibility into the code and allows you to modify or extend the add-in if needed.
 
