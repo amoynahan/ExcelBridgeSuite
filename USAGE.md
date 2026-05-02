@@ -113,22 +113,83 @@ add_ten <- function(x) {
 
 ## Plotting
 
-### Simple plot
+RExcelBridge supports two plotting workflows:
 
-=RPlot("plot(1:5, c(0,1,4,9,16), type='b')", "BasicPlot", 800, 600)
-
-![Plot](docs/images/SimplePlot.jpg)
+1. Simple plotting using the RExcelBridge ribbon
+2. Advanced/dynamic plotting using Excel macros
 
 ---
 
-### Dynamic Plot (recommended)
+## Simple Plotting: Insert Plot from the Add-in Ribbon
 
-Use two cells:
+Use this approach when you want to create a plot once and insert it into the worksheet.
 
-- RPlotDataNamed (creates plot)
-- PlotLink (displays image)
+### Example
 
-![PlotData](docs/images/RPlotDataNamed.jpg)
+=RPlot("plot(1:5, c(0,1,4,9,16), type='b')", "BasicPlot", 800, 600)
+
+The formula returns the path to the generated PNG file.
+
+![RPlot](docs/images/RPlot.jpg)
+
+### Insert the plot
+
+1. Select the cell containing the returned plot path
+2. Go to the RExcelBridge ribbon
+3. Click Insert Plot From Selected Cell
+
+![Add-in Menu](docs/images/AddinMenu.jpg)
+
+![Simple Plot](docs/images/SimplePlot.jpg)
+
+---
+
+## Advanced Plotting: Dynamic Plots with Excel Macros
+
+Use this approach when you want the plot to update when the worksheet data changes.
+
+This workflow uses two parts:
+
+- RPlotDataNamed creates the plot and returns the image file path
+- PlotLink displays the image in the worksheet
+
+This requires the DisplayImages VBA macro.
+
+### Why use this approach
+
+This pattern is useful when:
+
+- the plot depends on worksheet data
+- you want to press F9 and refresh the plot
+- you want a reusable plotting workflow
+- you are using more complex R code such as ggplot2
+
+### Add the VBA module
+
+1. Open the VBA editor with Alt + F11
+2. In the Project pane, right-click the workbook
+3. Select Insert → Module
+4. Rename the module to DisplayImages
+5. Paste the PlotLink macro code into that module
+
+### Save as macro-enabled workbook
+
+Save the workbook as:
+
+Excel Macro-Enabled Workbook (*.xlsm)
+
+If you save as .xlsx, Excel will remove the VBA code.
+
+### Step 1 — Create the plot
+
+In one cell, use RPlotDataNamed to generate the plot and return the PNG path.
+
+![RPlotDataNamed](docs/images/RPlotDataNamed.jpg)
+
+### Step 2 — Display the plot
+
+In another cell, use PlotLink to display the generated image.
+
 ![PlotLink](docs/images/PlotLink.jpg)
 
 ---
