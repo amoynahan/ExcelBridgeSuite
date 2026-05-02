@@ -41,15 +41,16 @@ Expected:
 
 ---
 
-If these steps work, you are ready to continue.
+## Validation
 
----
+If the steps above work, your environment is correctly configured and you are ready to continue.
 
-## Before You Start
+The following have been validated:
 
-- Add-in is attached and checked  
-- rscript-path.txt points to Rscript.exe  
-- Files remain in publish folder  
+- The Excel add-in is loaded and active  
+- R is accessible via `Rscript.exe`  
+- The bridge is executing R code successfully  
+- All required files are correctly located in the publish folder  
 
 ---
 
