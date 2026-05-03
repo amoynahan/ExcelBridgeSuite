@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+    <!-- Native DLL built by the NativeMath C++ project -->
+    <NativeMathDll>$(SolutionDir)x64\$(Configuration)\NativeMath.dll</NativeMathDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ExcelDna.AddIn" Version="1.9.0" />
+    <PackageReference Include="ExcelDna.Integration" Version="1.9.0" />
+  </ItemGroup>
+
+  <!-- Fail clearly if NativeMath.dll was not built -->
+  <Target Name="CheckNativeMathDll" BeforeTargets="Build">
+    <Error
+      Condition="!Exists('$(NativeMathDll)')"
+      Text="NativeMath.dll was not found at: $(NativeMathDll). Build the NativeMath project first, or check the native output path." />
+  </Target>
+
+  <!-- Copy NativeMath.dll beside both the unpacked add-in and the packed publish files -->
+  <Target Name="CopyNativeMathDll" AfterTargets="Build">
+    <Message Text="Copying NativeMath.dll from $(NativeMathDll) to $(OutDir)" Importance="high" />
+
+    <Copy
+      SourceFiles="$(NativeMathDll)"
+      DestinationFolder="$(OutDir)"
+      SkipUnchangedFiles="false" />
+
+    <MakeDir Directories="$(OutDir)publish\" />
+
+    <Message Text="Copying NativeMath.dll from $(NativeMathDll) to $(OutDir)publish\" Importance="high" />
+
+    <Copy
+      SourceFiles="$(NativeMathDll)"
+      DestinationFolder="$(OutDir)publish\"
+      SkipUnchangedFiles="false" />
+  </Target>
+
+</Project>
