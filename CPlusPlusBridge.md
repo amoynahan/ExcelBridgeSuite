@@ -24,11 +24,11 @@ This makes it possible to build production-grade, performance-critical workflows
 
 ## How it fits in ExcelBridgeSuite
 
-Core/ExcelBridge acts as both:
-- a standalone C++ bridge
-- a performance layer that other bridges can build on
+Core/ExcelBridge is the native C++ bridge and the primary environment for building functions used in Excel.
 
-Other bridges (R, Python, Julia) focus on flexibility and ecosystem integration, while Core/ExcelBridge focuses on speed and control.
+It is intended for implementing production-ready logic in C++, where performance, control, and reliability matter.
+
+Other bridges (R, Python, Julia) are used for exploration, prototyping, and validation. A typical workflow is to develop or test logic in one of these environments, then implement the final version in C++ and expose it to Excel through Core/ExcelBridge.
 
 ## Example use cases
 
