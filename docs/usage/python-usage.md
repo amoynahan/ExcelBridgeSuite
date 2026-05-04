@@ -1,12 +1,11 @@
+# PythonExcelBridge Usage Guide
 
-# RExcelBridge Usage Guide
+This guide explains how to use PythonExcelBridge, the Python-based add-in in ExcelBridgeSuite.
 
-This guide explains how to use RExcelBridge, the R-based add-in in ExcelBridgeSuite.
+PythonExcelBridge follows the same bridge pattern:
+Excel → Add-in → Python → Add-in → Excel
 
-RExcelBridge is the reference implementation of the bridge pattern:
-Excel → Add-in → R → Add-in → Excel
-
-If you understand this workflow, the Julia and Python bridges will follow naturally.
+If you understand this workflow, the R and Julia bridges will follow naturally.
 
 ---
 
@@ -14,21 +13,16 @@ If you understand this workflow, the Julia and Python bridges will follow natura
 
 ### Step 1 — Check connectivity
 
-=RPing()
-
-![RPing](docs/images/Rping.jpg)
+=PPing()
 
 Expected:
-OK | R version ...
+OK | Python version ...
 
 ---
 
-
 ### Step 2 — Evaluate a simple expression
 
-=REval("1+1")
-
-![Simple](docs/images/SimpleExpression.jpg)
+=PEval("1+1")
 
 Expected:
 2
@@ -37,9 +31,7 @@ Expected:
 
 ### Step 3 — Return multiple values
 
-=REval("c(10,20,30)")
-
-![Vector](docs/images/ReturnVector.jpg)
+=PEval("[10,20,30]")
 
 ---
 
@@ -50,59 +42,50 @@ If the steps above work, your environment is correctly configured and you are re
 The following have been validated:
 
 - The Excel add-in is loaded and active  
-- R is accessible via `Rscript.exe`  
-- The bridge is executing R code successfully  
+- Python is accessible via the configured executable  
+- The bridge is executing Python code successfully  
 - All required files are correctly located in the publish folder  
 
 ---
 
 ## Core Workflow
 
-### Evaluate R code
+### Evaluate Python code
 
-=REval("sqrt(16)")
+=PEval("16**0.5")
 
 ---
 
-### Call an R function
+### Call a Python function
 
-=RCall("sum",1,2,3)
+=PCell("sum",[1,2,3])
 
 ---
 
 ### Return structured data
 
-=REval("matrix(c(1,2,3,4), nrow=2)")
-
-![Matrix](docs/images/ReturnMatrix.jpg)
+=PEval("import numpy as np; np.array([[1,2],[3,4]])")
 
 ---
 
-### Pass data from Excel to R
+### Pass data from Excel to Python
 
-=RSet("x", A1:B3)
+=PSet("x", A1:B3)
 
-![RSet](docs/images/RSet.jpg)
-
-=RGet("x")
-
-![RGet](docs/images/RGet.jpg)
+=PGet("x")
 
 ---
 
 ## Custom Functions
 
-Place in RFunctions.R
+Place in PythonFunctions.py
 
 Example:
 
-add_ten <- function(x) {
-  x + 10
-}
+def add_ten(x):
+    return x + 10
 
-=REval("add_ten(5)")
-
-![Add](docs/images/Add10.jpg)
+=PEval("add_ten(5)")
 
 ---
 
@@ -112,27 +95,25 @@ add_ten <- function(x) {
 
 This demonstrates real numerical computation.
 
-### R Wrapper
+### Python Wrapper
 
-Add the wrapper to `RFunctions.R`:
+Add the wrapper to `PythonFunctions.py`:
 
-chol_decomp <- function(x, tol = 1e-8) {  
-  x <- as.matrix(x)  
-  
-  if (!is.numeric(x)) {  
-    stop("Input must be numeric.")  
-  }  
-  
-  if (nrow(x) != ncol(x)) {  
-    stop("Input matrix must be square.")  
-  }  
-  
-  if (max(abs(x - t(x))) > tol) {  
-    stop("Input matrix must be symmetric.")  
-  }  
-  
-  chol(x)  
-}
+import numpy as np
+
+def chol_decomp(x, tol=1e-8):
+    x = np.array(x, dtype=float)
+    
+    if x.ndim != 2:
+        raise ValueError("Input must be a matrix.")
+    
+    if x.shape[0] != x.shape[1]:
+        raise ValueError("Input matrix must be square.")
+    
+    if np.max(np.abs(x - x.T)) > tol:
+        raise ValueError("Input matrix must be symmetric.")
+    
+    return np.linalg.cholesky(x)
 
 ### Excel Example
 
@@ -151,7 +132,7 @@ Put this matrix in Excel:
 Then run:
 
 ```excel
-=RCall("CholDecomp", A1:B2)
+=PEval("chol_decomp(x)")
 ```
 
 Expected result:
@@ -160,90 +141,41 @@ Expected result:
 2        1
 0   1.414214
 ```
-![Description of image](docs/images/CholDecomp.jpg)
 
 ---
 
 ## Plotting
 
-RExcelBridge supports two plotting workflows:
-
-1. Simple plotting using the RExcelBridge ribbon
-2. Advanced/dynamic plotting using Excel macros
+PythonExcelBridge supports plotting using matplotlib.
 
 ---
 
-## Simple Plotting: Insert Plot from the Add-in Ribbon
+## Simple Plotting
 
-Use this approach when you want to create a plot once and insert it into the worksheet.
+Use this approach when you want to create a plot once and return the file path.
 
 ### Example
 
-=RPlot("plot(1:5, c(0,1,4,9,16), type='b')", "BasicPlot", 800, 600)
+=PPlot("import matplotlib.pyplot as plt; plt.plot([1,2,3],[1,4,9])")
 
 The formula returns the path to the generated PNG file.
 
-![RPlot](docs/images/RPlot.jpg)
-
-### Insert the plot
-
-1. Select the cell containing the returned plot path
-2. Go to the RExcelBridge ribbon
-3. Click Insert Plot From Selected Cell
-
-![Add-in Menu](docs/images/AddinMenu.jpg)
-
-![Simple Plot](docs/images/SimplePlot.jpg)
-
 ---
 
-## Advanced Plotting: Dynamic Plots with Excel Macros
+## Advanced Plotting (Dynamic)
 
 Use this approach when you want the plot to update when the worksheet data changes.
 
-This workflow uses two parts:
+This workflow uses:
 
-- RPlotDataNamed creates the plot and returns the image file path
-- PlotLink displays the image in the worksheet
+- PPlotDataNamed to create the plot and return the image path  
+- PlotLink (VBA macro) to display the image  
 
-This requires the DisplayImages VBA macro.
+### Example
 
-### Why use this approach
+=PPlotDataNamed(A1:A10,"x",B1:B10,"y","import matplotlib.pyplot as plt; plt.plot(x,y)")
 
-This pattern is useful when:
-
-- the plot depends on worksheet data
-- you want to press F9 and refresh the plot
-- you want a reusable plotting workflow
-- you are using more complex R code such as ggplot2
-
-### Add the VBA module
-
-1. Open the VBA editor with Alt + F11
-2. In the Project pane, right-click the workbook
-3. Select Insert → Module
-4. Rename the module to DisplayImages
-5. Paste the PlotLink macro code into that module
-
-### Save as macro-enabled workbook
-
-Save the workbook as:
-
-Excel Macro-Enabled Workbook (*.xlsm)
-
-If you save as .xlsx, Excel will remove the VBA code.
-
-### Step 1 — Create the plot
-
-In one cell, use RPlotDataNamed to generate the plot and return the PNG path.
-
-![RPlotDataNamed](docs/images/RPlotDataNamed.jpg)
-
-### Step 2 — Display the plot
-
-In another cell, use PlotLink to display the generated image.
-
-![PlotLink](docs/images/PlotLink.jpg)
+Then use PlotLink in another cell to display the image.
 
 ---
 
@@ -257,19 +189,19 @@ See:
 ## Troubleshooting
 
 Ping fails → reload add-in  
-R fails → check rscript-path.txt  
+Python fails → check python-path.txt  
 Plot fails → check plot-path.txt  
 
 ---
 
 ## Function Reference
 
-RPing()
-REval(code)
-RCall(fun,...)
-RSet(name,value)
-RGet(name)
-RPlot(...)
-RSource(file)
-RObjects()
-RDescribe(name)
+PPing()
+PEval(code)
+PCell(fun,...)
+PSet(name,value)
+PGet(name)
+PPlot(...)
+PSource(file)
+PObjects()
+PDescribe(name)
