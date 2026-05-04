@@ -107,7 +107,7 @@ Python fails → check python-path.txt
 ---
 
 ## Function Reference
-
+```
 PPing()
 PEval(code)
 PSet(name,value)
@@ -116,3 +116,4 @@ PSetTable(name,value,hasHeaders)
 PGetTable(name)
 PGetNumeric(name)
 PLastTransfer()
+```
