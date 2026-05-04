@@ -2,7 +2,7 @@
 
 This guide explains how to use PythonExcelBridge, the Python-based add-in in ExcelBridgeSuite.
 
-PythonExcelBridge follows the same bridge pattern:
+PythonExcelBridge follows the bridge pattern:
 Excel → Add-in → Python → Add-in → Excel
 
 If you understand this workflow, the R and Julia bridges will follow naturally.
@@ -58,7 +58,7 @@ The following have been validated:
 
 ### Call a Python function
 
-=PCell("sum",[1,2,3])
+=PEval("sum([1,2,3])")
 
 ---
 
@@ -73,6 +73,40 @@ The following have been validated:
 =PSet("x", A1:B3)
 
 =PGet("x")
+
+---
+
+## Fast Data Transfer
+
+PythonExcelBridge includes optimized transfer paths for numeric data and tables.
+
+### Numeric matrices
+
+=PSet("x", A1:D1000)
+
+=PGetNumeric("x")
+
+=PLastTransfer()
+
+---
+
+### Tables / DataFrames
+
+=PSetTable("df", A1:D1000, TRUE)
+
+=PGetTable("df")
+
+=PLastTransfer()
+
+---
+
+### Large data example
+
+=PSet("x", A1:Z10000)
+
+=PGetNumeric("x")
+
+=PLastTransfer()
 
 ---
 
@@ -115,6 +149,8 @@ def chol_decomp(x, tol=1e-8):
     
     return np.linalg.cholesky(x)
 
+---
+
 ### Excel Example
 
 ### Requirements
@@ -132,6 +168,7 @@ Put this matrix in Excel:
 Then run:
 
 ```excel
+=PSet("x", A1:B2)
 =PEval("chol_decomp(x)")
 ```
 
@@ -150,11 +187,7 @@ PythonExcelBridge supports plotting using matplotlib.
 
 ---
 
-## Simple Plotting
-
-Use this approach when you want to create a plot once and return the file path.
-
-### Example
+### Simple Plotting
 
 =PPlot("import matplotlib.pyplot as plt; plt.plot([1,2,3],[1,4,9])")
 
@@ -162,20 +195,20 @@ The formula returns the path to the generated PNG file.
 
 ---
 
-## Advanced Plotting (Dynamic)
+### Plot Excel data
 
-Use this approach when you want the plot to update when the worksheet data changes.
+=PPlotDataNamed(A1:A10,"x",B1:B10,"y","import matplotlib.pyplot as plt; plt.plot(x,y)")
+
+---
+
+### Dynamic Plotting
+
+Use this approach when you want the plot to update when worksheet data changes.
 
 This workflow uses:
 
 - PPlotDataNamed to create the plot and return the image path  
 - PlotLink (VBA macro) to display the image  
-
-### Example
-
-=PPlotDataNamed(A1:A10,"x",B1:B10,"y","import matplotlib.pyplot as plt; plt.plot(x,y)")
-
-Then use PlotLink in another cell to display the image.
 
 ---
 
@@ -198,10 +231,15 @@ Plot fails → check plot-path.txt
 
 PPing()
 PEval(code)
-PCell(fun,...)
+PCall(fun,...)
 PSet(name,value)
 PGet(name)
+PSetTable(name,value,hasHeaders)
+PGetTable(name)
+PGetNumeric(name)
 PPlot(...)
+PPlotDataNamed(...)
+PLastTransfer()
 PSource(file)
 PObjects()
 PDescribe(name)
