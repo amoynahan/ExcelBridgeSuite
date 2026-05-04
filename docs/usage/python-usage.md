@@ -99,6 +99,60 @@ The following have been validated:
 
 ---
 
+## Python Examples
+
+### Lambda Function
+
+=PEval("(lambda x: x + 10)(5)")
+
+Expected:
+15
+
+---
+
+### List Comprehension
+
+=PEval("[x*x for x in [1,2,3,4]]")
+
+Expected:
+1   4   9   16
+
+---
+
+### Cholesky Decomposition (NumPy)
+
+### Requirements
+- Matrix must be square
+- Matrix should be symmetric
+- Matrix must be positive definite
+
+Put this matrix in Excel:
+
+```
+4   2
+2   3
+```
+
+### Step 1 — Send data to Python
+
+=PSet("x", A1:B2)
+
+### Step 2 — Run Cholesky
+
+=PEval("import numpy as np; np.linalg.cholesky(x)")
+
+Expected result:
+
+```
+2        0
+1   1.414214
+```
+
+Note:
+NumPy returns a **lower triangular matrix**, which differs from R's upper triangular result.
+
+
+
 ## Troubleshooting
 
 Ping fails → reload add-in  
