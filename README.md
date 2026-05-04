@@ -2,6 +2,8 @@
 
 ExcelBridgeSuite is a multi-language Excel add-in framework built with Excel-DNA.
 
+Note: R-Version is ready. Python and Julia are in development
+
 It is designed to extend Excel with external runtimes and high-performance native code, including integration with C++ libraries.
 
 ## Current bridges
