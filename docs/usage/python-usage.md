@@ -138,13 +138,13 @@ Put this matrix in Excel:
 2   3
 ```
 
-### Step 1 — Send data to Python
+### Step 1 — load the NumPy librar
 
-=PSet("x", A1:B2)
+=PEval("import numpy as np")
 
 ### Step 2 — Run Cholesky
 
-=PEval("import numpy as np; np.linalg.cholesky(x)")
+=PCall("np.linalg.cholesky",A1:B2)
 
 Expected result:
 
