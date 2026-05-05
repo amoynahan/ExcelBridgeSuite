@@ -113,6 +113,17 @@ Expected:
 
 ---
 
+### Call python function (create random matrix)
+
+loads the NumPy library into the Python session and assigns it the alias np.
+
+=PEval("import numpy as np")
+
+Generate a 10000 × 26 random matrix:
+
+=PCall("np.random.rand",10000,26)
+
+
 ### Cholesky Decomposition (NumPy)
 
 ### Requirements
