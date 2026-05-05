@@ -53,12 +53,6 @@ The following have been validated:
 
 ---
 
-### Return structured data
-
-=PEval("import numpy as np; np.array([[1,2],[3,4]])")
-
----
-
 ### Pass data from Excel to Python
 
 =PSet("x", A1:B3)
