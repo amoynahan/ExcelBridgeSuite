@@ -249,7 +249,7 @@ In another cell, use PlotLink to display the generated image.
 ## Performance (Large Data)
 
 See:
-[Performance Guide](PERFORMANCE.md)
+[Performance Guide](Performance.md)
 
 ---
 
