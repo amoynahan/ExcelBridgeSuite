@@ -156,7 +156,7 @@ Expected result:
 Note:
 NumPy returns a **lower triangular matrix**, which differs from R's upper triangular result.
 
-
+![Simple Plot](../images/python/SimplePlot.jpg)
 
 ## Troubleshooting
 
