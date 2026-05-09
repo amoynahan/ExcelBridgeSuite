@@ -177,7 +177,9 @@ or:
 ```text
 Ctrl + Shift + P
 ```
+### Example Output
 
+![Simple Plot](../images/Julia/SimplePlot.jpg)
 ---
 
 ## Dynamic Julia Plot from Excel Data
