@@ -7,6 +7,12 @@ Excel → Add-in → R → Add-in → Excel
 
 If you understand this workflow, the Julia and Python bridges will follow naturally.
 
+If you prefer Python instead of R, see:
+
+[PythonExcelBridge Usage Guide](python-usage.md)
+
+PythonExcelBridge follows the same bridge architecture and workflow patterns demonstrated in this guide, but uses Python and matplotlib instead of R.
+
 ---
 
 ## Quick Start
@@ -52,12 +58,6 @@ The following have been validated:
 - R is accessible via `Rscript.exe`  
 - The bridge is executing R code successfully  
 - All required files are correctly located in the publish folder  
-
-If you prefer Python instead of R, see:
-
-[PythonExcelBridge Usage Guide](python-usage.md)
-
-PythonExcelBridge follows the same bridge architecture and workflow patterns demonstrated in this guide, but uses Python and matplotlib instead of R.
 
 ---
 
