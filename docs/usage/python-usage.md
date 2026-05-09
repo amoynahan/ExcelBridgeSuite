@@ -190,6 +190,127 @@ Ctrl + Shift + P
 
 ![Simple Plot](../images/python/SimplePlot.jpg)
 
+## Dynamic Python Plot from Excel Data
+
+This example demonstrates a refreshable matplotlib plot driven directly from worksheet data.
+
+The workflow is:
+
+```text
+Excel worksheet data
+    ↓
+PPlotDataNamed()
+    ↓
+matplotlib generates PNG
+    ↓
+PlotLink() displays image
+    ↓
+Worksheet recalculation refreshes the plot
+```
+
+### 1. Worksheet Data
+
+Create worksheet data in columns A and B.
+
+Column A contains X values.
+
+Column B contains formulas that change dynamically.
+
+Example:
+
+```text
+A1: X      B1: Y
+A2: 1      B2: =A2+(RAND()-0.5)
+A3: 2      B3: =A3+(RAND()-0.5)
+A4: 3      B4: =A4+(RAND()-0.5)
+...
+A11: 10    B11: =A11+(RAND()-0.5)
+```
+
+Because the Y values use `RAND()`, the data changes every time Excel recalculates.
+
+### 2. Create the Python Plot
+
+In cell `D1`, enter:
+
+```excel
+=PPlotDataNamed(
+  "plt.plot(X, Y, marker='o')",
+  "BasicPlotData",
+  800,
+  600,
+  "X", A2:A11,
+  "Y", B2:B11
+)
+```
+
+This formula reads the Excel ranges into Python, creates a matplotlib plot, saves the PNG file, and returns the PNG path to Excel.
+
+The returned value will look similar to:
+
+```text
+D:\OneDrive - Avalere Health\Documents\PythonExcelBridge\PlotCache\Test_Sheet1_D1_BasicPlotData.png
+```
+
+### 3. Display the Plot in Excel
+
+In cell `D2`, enter:
+
+```excel
+=PlotLink(D1, 600, 400)
+```
+
+`PlotLink()` links the PNG path to a displayed image on the worksheet.
+
+Arguments:
+
+```text
+PlotLink(plotPath, widthPx, heightPx)
+```
+
+### 4. Import the VBA Plot Display Module
+
+Import the VBA module:
+
+```text
+vba/DisplayImages.bas
+```
+
+This module provides the `PlotLink()` function and the image refresh logic.
+
+It handles:
+
+- detecting `=PlotLink(...)` formulas
+- inserting plot images
+- refreshing images after recalculation
+- replacing outdated images automatically
+
+### 5. Add the Worksheet Recalculation Event
+
+In the worksheet VBA code page, add:
+
+```vba
+Private Sub Worksheet_Calculate()
+    RefreshPlotLinksInSheet Me
+End Sub
+```
+
+This event handler refreshes displayed plot images whenever the worksheet recalculates.
+
+### 6. Refresh the Plot
+
+Press:
+
+```text
+F9
+```
+
+Each recalculation changes the worksheet data, reruns the Python plotting code, regenerates the PNG file, and refreshes the displayed plot image.
+
+### Example Output
+
+![Dynamic Plot](../images/python/DynamicPlot.jpg)
+
 ## Troubleshooting
 
 Ping fails → reload add-in  
