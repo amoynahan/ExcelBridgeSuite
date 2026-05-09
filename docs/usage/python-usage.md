@@ -156,6 +156,38 @@ Expected result:
 Note:
 NumPy returns a **lower triangular matrix**, which differs from R's upper triangular result.
 
+## Simple Python Plot
+
+The example below creates a matplotlib plot, saves it to the plot cache folder, and returns the PNG path to Excel.
+
+### Excel Formula
+
+```excel
+=PPlot("plt.plot([1,2,3,4,5], [1,4,9,16,25], marker='o')", "BasicPlot", 800, 600)
+```
+
+### Result
+
+The formula returns a PNG file path similar to:
+
+```text
+D:\OneDrive - Avalere Health\Documents\PythonExcelBridge\PlotCache\Book1_Sheet1_A4_BasicPlot.png
+```
+
+Select the cell containing the PNG path and use either:
+
+```text
+Add-ins -> PythonExcelBridge -> Insert Plot From Selected Cell
+```
+
+or:
+
+```text
+Ctrl + Shift + P
+```
+
+### Example Output
+
 ![Simple Plot](../images/python/SimplePlot.jpg)
 
 ## Troubleshooting
