@@ -53,6 +53,12 @@ The following have been validated:
 - The bridge is executing R code successfully  
 - All required files are correctly located in the publish folder  
 
+If you prefer Python instead of R, see:
+
+[PythonExcelBridge Usage Guide](python-usage.md)
+
+PythonExcelBridge follows the same bridge architecture and workflow patterns demonstrated in this guide, but uses Python and matplotlib instead of R.
+
 ---
 
 ## Core Workflow
