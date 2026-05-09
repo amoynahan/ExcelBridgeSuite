@@ -479,7 +479,7 @@ public static class JFunctions
             }
 
             string setupCode = BuildNamedDfCode(cols);
-            object assignResult = JBridge.Eval(setupCode);
+            object assignResult = JBridge.Eval("begin\n" + setupCode + "\nend");
             if (assignResult is string assignError && IsBridgeError(assignError))
                 return assignError;
 
