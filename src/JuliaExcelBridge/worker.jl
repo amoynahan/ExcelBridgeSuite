@@ -3,6 +3,12 @@
 
 import Pkg
 
+try
+    using DataFrames
+catch e
+    @warn "DataFrames not available" exception=(e, catch_backtrace())
+end
+
 # Ensure JSON is available, then load it at top level.
 try
     Base.find_package("JSON")
@@ -299,7 +305,24 @@ function _transfer_dir()
 end
 
 function _resolve_named_object(name::AbstractString)
-    return resolve_object(name)
+    nm = strip(String(name))
+
+    if haskey(OBJECT_STORE, nm)
+        return OBJECT_STORE[nm]
+    end
+
+    sym = Symbol(nm)
+
+    if isdefined(Main, sym)
+        return getfield(Main, sym)
+    end
+
+    # fallback: allow names like Main.df or df
+    try
+        return Core.eval(Main, Meta.parse(nm))
+    catch
+        error("Object not found: " * nm)
+    end
 end
 
 function _array_shape_for_excel(x)
@@ -383,60 +406,92 @@ end
 
 function nrow_df(x)
     try
-        return Int(getfield(_try_import_dataframes(), :nrow)(x))
+        return Int(Base.invokelatest(getfield(_try_import_dataframes(), :nrow), x))
     catch
-        return size(x, 1)
+        return Int(Base.invokelatest(size, x, 1))
     end
 end
 
 function ncol_df(x)
     try
-        return Int(getfield(_try_import_dataframes(), :ncol)(x))
+        return Int(Base.invokelatest(getfield(_try_import_dataframes(), :ncol), x))
     catch
-        return size(x, 2)
+        return Int(Base.invokelatest(size, x, 2))
     end
 end
 
 function table_column_names(x)
-    return [String(nm) for nm in propertynames(x)]
+    return [String(nm) for nm in Base.invokelatest(propertynames, x)]
 end
+
+
 
 function export_table_object(x; source="JGetTable", name="")
     t0 = time()
     is_dataframe_like(x) || error("Object is not a DataFrame.")
+
     rows = nrow_df(x)
     colnames = table_column_names(x)
     cols = length(colnames)
     columns = Any[]
 
     for cname in colnames
-        col = x[!, Symbol(cname)]
+        col = Base.invokelatest(getindex, x, !, Symbol(cname))
         nonmissing = [v for v in col if !ismissing(v)]
-        if all(v -> v isa Number, nonmissing)
+
+        # Fast numeric path only when there are no missing values.
+        # If numeric column has missing values, send through mixed/character path
+        # so missing can return to Excel as a blank instead of 0.
+        if all(v -> v isa Number, nonmissing) && !any(ismissing, col)
             vals = Vector{Float64}(undef, rows)
+
             for i in 1:rows
-                vals[i] = ismissing(col[i]) ? NaN : Float64(col[i])
+                vals[i] = Float64(col[i])
             end
+
             file = joinpath(_transfer_dir(), "jexcel_get_table_" * string(uuid4()) * ".bin")
+
             open(file, "w") do io
                 for v in vals
                     write(io, v)
                 end
             end
-            push!(columns, Dict("name" => cname, "type" => "numeric", "file" => file, "na" => "NaN"))
+
+            push!(columns, Dict(
+                "name" => cname,
+                "type" => "numeric",
+                "file" => file,
+                "na" => "NaN"
+            ))
         else
             vals = Any[]
+
             for i in 1:rows
-                push!(vals, ismissing(col[i]) ? nothing : coerce_for_json(col[i]))
+                push!(vals, ismissing(col[i]) ? "" : coerce_for_json(col[i]))
             end
-            push!(columns, Dict("name" => cname, "type" => "character", "values" => vals))
+
+            push!(columns, Dict(
+                "name" => cname,
+                "type" => "character",
+                "values" => vals
+            ))
         end
     end
 
     elapsed = (time() - t0) * 1000.0
+
     _set_last_transfer("typed table", source, String(name), x, rows, cols, elapsed)
-    return Dict("__jexcel_transfer_type" => "table", "rows" => rows, "cols" => cols, "include_headers" => true, "columns" => columns, "class" => string(typeof(x)))
+
+    return Dict(
+        "__jexcel_transfer_type" => "table",
+        "rows" => rows,
+        "cols" => cols,
+        "include_headers" => true,
+        "columns" => columns,
+        "class" => string(typeof(x))
+    )
 end
+
 
 function set_table_from_payload(name::AbstractString, rows::Integer, cols::Integer, columns)
     t0 = time()
@@ -509,38 +564,14 @@ function _simple_global_assignment_name(code::AbstractString)
 end
 
 function eval_code_for_excel(code)
-    simple_name = _simple_global_assignment_name(code)
-
-    if simple_name !== nothing
-        # Fast, reliable path for the common Excel workflow:
-        #   JEval("x = randn(10000,20)")
-        # Julia assignment inside helper functions can be tricky, so evaluate
-        # the right-hand side in Main, then explicitly store the result in
-        # OBJECT_STORE. Later JGetNumeric/JCall look in OBJECT_STORE first.
-        m = match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)(.*)$"s, code)
-        rhs = m === nothing ? nothing : String(m.captures[2])
-        if rhs === nothing || isempty(strip(rhs))
-            error("Could not parse assignment right-hand side.")
-        end
-        value = Core.eval(Main, Meta.parse(rhs))
-        OBJECT_STORE[simple_name] = value
-        try
-            Core.eval(Main, :($(Symbol(simple_name)) = OBJECT_STORE[$(String(simple_name))]))
-        catch
-            # OBJECT_STORE is the authoritative store for bridge objects.
-        end
-        return "OK"
-    end
-
     expr = Meta.parse("begin\n" * code * "\nend")
+
     has_assignment = _contains_assignment_expr(expr)
     assigned = Symbol[]
     _assigned_symbols!(assigned, expr)
+
     value = Core.eval(Main, expr)
 
-    # In Julia, assignment returns the assigned value. For Excel bridge usage,
-    # treat assignment/effect code like R/Python: create/update the object and
-    # return a compact status instead of spilling a large result accidentally.
     if has_assignment
         for sym in assigned
             if isdefined(Main, sym)
@@ -553,6 +584,7 @@ function eval_code_for_excel(code)
     return coerce_for_transport(value; source="JEval", name="")
 end
 
+    
 function handle_request(req::AbstractDict)
     id = get(req, "id", nothing)
     cmd = get(req, "cmd", "")
