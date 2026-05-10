@@ -12,6 +12,7 @@ It is designed to extend Excel with external runtimes and high-performance nativ
 - PythonExcelBridge  
 - JuliaExcelBridge  
 - Core/ExcelBridge (C++ bridge)
+- DuckDBExcelBridge (coming soon - need to do users guide)
 
 ## What this repo does
 
