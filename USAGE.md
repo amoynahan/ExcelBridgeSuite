@@ -10,6 +10,7 @@ If you understand this workflow, the Julia and Python bridges will follow natura
 If you prefer Python instead of R, see:
 
 [PythonExcelBridge Usage Guide](docs/usage/python-usage.md)
+ 
 [JuliaExcelBridge Usage Guide](docs/usage/julia-usage.md)
 
 
