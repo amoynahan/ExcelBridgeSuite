@@ -13,6 +13,8 @@ If you prefer Python instead of R, see:
  
 [JuliaExcelBridge Usage Guide](docs/usage/julia-usage.md)
 
+[DuckdbExcelBridge Usage Guide](docs/usage/duckdb-usage.md)
+
 
 PythonExcelBridge follows the same bridge architecture and workflow patterns demonstrated in this guide, but uses Python and matplotlib instead of R.
 
