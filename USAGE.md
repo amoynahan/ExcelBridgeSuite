@@ -10,6 +10,8 @@ If you understand this workflow, the Julia and Python bridges will follow natura
 If you prefer Python instead of R, see:
 
 [PythonExcelBridge Usage Guide](docs/usage/python-usage.md)
+[JuliaExcelBridge Usage Guide](docs/usage/julia-usage.md)
+
 
 PythonExcelBridge follows the same bridge architecture and workflow patterns demonstrated in this guide, but uses Python and matplotlib instead of R.
 
