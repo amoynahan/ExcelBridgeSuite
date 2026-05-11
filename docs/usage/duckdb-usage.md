@@ -31,12 +31,10 @@ DuckDB runs inside the Excel process and does not require a separate database se
 Typical publish folder:
 
 ```text
-DuckDBExcelBridge64.xll
-DuckDBExcelBridge.dna
-DuckDBExcelBridge.dll
-DuckDB.NET.Data.dll
-ExcelDna.Integration.dll
-runtimes\
+duckdb.dll
+DuckDBExcelBridge64-packed.xll
+DuckDBExcelBridge-packed.xll
+
 ```
 
 ### Loading the Add-In
