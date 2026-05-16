@@ -283,11 +283,11 @@ The framework is specifically designed for integration with advanced native libr
 
 Potential uses:
 
-- Regression
-- PCA
 - Matrix decompositions
-- Optimization
-- Statistical modeling
+- Numerical optimization
+- High-performance matrix operations
+- Simulation engines
+- Large-scale numerical computation
 
 Intel MKL and OpenBLAS are optional performance backends that could accelerate large numerical workloads.
 
@@ -331,7 +331,7 @@ Potential uses:
 
 ---
 
-# Data & Analytics
+# Embedded Data & Analytics
 
 | Library | Purpose |
 |---|---|
@@ -376,12 +376,11 @@ Potential uses:
 
 Potential uses:
 
-- Saving computational results
-- Persisting session metadata
-- Caching intermediate outputs
-- Storing object handles and descriptions
-- Reusing expensive computations
-- Querying saved results from Excel
+- Persistent computational sessions
+- Cached intermediate results
+- Reuse of expensive computations
+- Storage of object metadata
+- Queryable analytical results
 
 ---
 
