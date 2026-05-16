@@ -11,6 +11,7 @@
 
     <!-- Native DLL built by the NativeMath C++ project -->
     <NativeMathDll>$(SolutionDir)x64\$(Configuration)\NativeMath.dll</NativeMathDll>
+    <ExcelBridgeWorkerExe>$(SolutionDir)x64\$(Configuration)\ExcelBridgeWorker.exe</ExcelBridgeWorkerExe>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +24,9 @@
     <Error
       Condition="!Exists('$(NativeMathDll)')"
       Text="NativeMath.dll was not found at: $(NativeMathDll). Build the NativeMath project first, or check the native output path." />
+    <Error
+      Condition="!Exists('$(ExcelBridgeWorkerExe)')"
+      Text="ExcelBridgeWorker.exe was not found at: $(ExcelBridgeWorkerExe). Build the ExcelBridgeWorker project first, or check the worker output path." />
   </Target>
 
   <!-- Copy NativeMath.dll beside both the unpacked add-in and the packed publish files -->
@@ -34,12 +38,26 @@
       DestinationFolder="$(OutDir)"
       SkipUnchangedFiles="false" />
 
+    <Message Text="Copying ExcelBridgeWorker.exe from $(ExcelBridgeWorkerExe) to $(OutDir)" Importance="high" />
+
+    <Copy
+      SourceFiles="$(ExcelBridgeWorkerExe)"
+      DestinationFolder="$(OutDir)"
+      SkipUnchangedFiles="false" />
+
     <MakeDir Directories="$(OutDir)publish\" />
 
     <Message Text="Copying NativeMath.dll from $(NativeMathDll) to $(OutDir)publish\" Importance="high" />
 
     <Copy
       SourceFiles="$(NativeMathDll)"
+      DestinationFolder="$(OutDir)publish\"
+      SkipUnchangedFiles="false" />
+
+    <Message Text="Copying ExcelBridgeWorker.exe from $(ExcelBridgeWorkerExe) to $(OutDir)publish\" Importance="high" />
+
+    <Copy
+      SourceFiles="$(ExcelBridgeWorkerExe)"
       DestinationFolder="$(OutDir)publish\"
       SkipUnchangedFiles="false" />
   </Target>
