@@ -6,7 +6,7 @@ A reusable high-performance C++ computational framework for Excel built with Exc
 
 # Overview
 
-Core/ExcelBridge is a lightweight framework for building modern Excel add-ins that integrate directly with native C++ libraries.
+ExcelBridge is a lightweight framework for building modern Excel add-ins that integrate directly with native C++ libraries.
 
 The project is intentionally designed as a reusable computational shell rather than a finished analytics product.
 
@@ -40,9 +40,6 @@ The real value comes from linking advanced computational libraries such as:
 - Boost
 - CGAL
 - DuckDB
-- Intel MKL
-- OpenBLAS
-
 
 The project provides the infrastructure needed to expose those libraries cleanly inside Excel.
 
@@ -179,7 +176,7 @@ The native layer handles:
 - Numerical algorithms
 - Persistent objects
 - Session-style computation
-- Future scientific/quantitative workflows
+- Quantitative and analytical workflows
 
 This allows the framework to scale far beyond traditional VBA solutions.
 
@@ -203,7 +200,7 @@ This is especially important for:
 - QuantLib pricing engines
 - Optimization models
 - Monte Carlo simulations
-- Scientific workflows
+- Analytical workflows
 - Geometry engines
 
 ---
@@ -232,7 +229,7 @@ This becomes critical for:
 - Statistical modeling
 - Simulation output
 - Quantitative finance
-- Scientific computing
+- Numerical workflows
 
 ---
 
@@ -280,9 +277,7 @@ The framework is specifically designed for integration with advanced native libr
 
 | Library | Purpose |
 |---|---|
-| Eigen | Dense/sparse linear algebra |
-| Armadillo | MATLAB-style matrix workflows |
-| Blaze | High-performance vectorized math |
+| Eigen | Dense and sparse linear algebra |
 | Intel MKL | Optimized numerical kernels |
 | OpenBLAS | BLAS/LAPACK operations |
 
@@ -294,6 +289,8 @@ Potential uses:
 - Optimization
 - Statistical modeling
 
+Intel MKL and OpenBLAS are optional performance backends that could accelerate large numerical workloads.
+
 ---
 
 # Quantitative Finance
@@ -301,8 +298,7 @@ Potential uses:
 | Library | Purpose |
 |---|---|
 | QuantLib | Derivatives pricing and risk |
-| Premia | Financial option pricing |
-| Boost.Math | Financial/statistical functions |
+| Boost.Math | Financial and statistical functions |
 
 Potential uses:
 
@@ -321,53 +317,17 @@ A major motivation for the framework is enabling persistent QuantLib-style objec
 | Library | Purpose |
 |---|---|
 | CGAL | Computational geometry |
-| GEOS | Spatial geometry engine |
-| GDAL | Geospatial processing |
-| Boost.Geometry | Geometry algorithms |
+| GEOS | Spatial geometry operations |
+| GDAL | Geospatial data processing |
+| Boost.Geometry | Geometry algorithms and utilities |
 
 Potential uses:
 
-- Mesh generation
 - Polygon operations
+- Spatial analysis
 - Mapping workflows
-- Scientific geometry models
-
----
-
-# Scientific & Engineering Libraries
-
-| Library | Purpose |
-|---|---|
-| Sundials | Differential equation solvers |
-| PETSc | Parallel scientific computing |
-| Trilinos | Large-scale numerical methods |
-| deal.II | Finite element analysis |
-| OpenFOAM | Computational fluid dynamics |
-
-Potential uses:
-
-- PDE solvers
-- Engineering simulations
-- Physics models
-- Environmental modeling
-
----
-
-# Machine Learning & AI
-
-| Library | Purpose |
-|---|---|
-| XGBoost | Gradient boosting |
-| ONNX Runtime | ML inference |
-| TensorRT | GPU inference acceleration |
-| dlib | Classical machine learning |
-| mlpack | C++ machine learning |
-
-Potential uses:
-
-- Embedded prediction models
-- Real-time scoring
-- Native inference engines
+- Geometric modeling
+- Scientific visualization
 
 ---
 
@@ -375,56 +335,53 @@ Potential uses:
 
 | Library | Purpose |
 |---|---|
-| DuckDB | Embedded analytics database |
-| Apache Arrow | Columnar in-memory data |
-| Parquet C++ | High-performance storage |
-| SQLite | Lightweight persistence |
-| HDF5 | Scientific datasets |
+| DuckDB | Embedded analytical database |
+| Apache Arrow | Columnar in-memory data interchange |
+| Parquet C++ | Columnar data storage |
+| SQLite | Lightweight embedded persistence |
 
 Potential uses:
 
-- Large local analytics
-- Persistent object storage
-- Embedded databases
+- Local analytical workflows
+- Persistent computational sessions
 - Fast table interchange
+- Querying large datasets
+- Embedded data storage
 
 ---
 
-# Parallel & High-Performance Computing
+# Performance & Parallelism
 
 | Library | Purpose |
 |---|---|
-| OpenMP | Shared-memory parallelism |
-| Intel TBB | Task-based parallelism |
-| CUDA | GPU acceleration |
-| OpenCL | Cross-platform GPU compute |
-| MPI | Distributed computing |
+| OpenMP | Shared-memory parallel computation |
+| Intel TBB | Task-based parallel execution |
 
 Potential uses:
 
+- Parallel numerical computation
 - Monte Carlo simulation
-- Parallel optimization
-- GPU acceleration
-- Distributed compute grids
+- Optimization workflows
+- High-performance matrix operations
 
 ---
 
-# Serialization & Infrastructure
+# Persistence & Infrastructure
 
 | Library | Purpose |
 |---|---|
-| Boost.Serialization | Object persistence |
-| Protobuf | Structured messaging |
-| FlatBuffers | Zero-copy serialization |
-| ZeroMQ | Messaging infrastructure |
-| gRPC | Remote compute APIs |
+| DuckDB | Persistent tables, cached results, and analytical storage |
+| SQLite | Lightweight metadata and configuration storage |
+| Boost.Serialization | Native C++ object serialization |
 
 Potential uses:
 
-- Persistent object stores
-- Async execution
-- Worker communication
-- Distributed compute services
+- Saving computational results
+- Persisting session metadata
+- Caching intermediate outputs
+- Storing object handles and descriptions
+- Reusing expensive computations
+- Querying saved results from Excel
 
 ---
 
@@ -590,7 +547,6 @@ Potential benefits:
 - Background execution
 - Persistent QuantLib sessions
 - Cached models
-- Distributed compute
 
 ---
 
@@ -653,7 +609,6 @@ A reasonable evolution path is:
 4. Add async/background jobs
 5. Add QuantLib examples
 6. Add persistent worker process
-7. Add distributed execution
 
 ---
 
